@@ -1,31 +1,39 @@
 # Whiteout
 
-Browser extension that anonymizes documents locally. Paste text, get a clean version. Your document never leaves your browser.
+Anonymize documents locally. Paste text, get a clean version. Your document never leaves your device.
 
-Whiteout detects personal names, company names, addresses and other identifiable entities in your text, proposes aliases, and produces an anonymized version — all inside your browser. The only thing that leaves your machine is isolated lookup terms sent to [Touchstone](https://github.com/hazyhaar/touchstone-registry), a blind classification service that doesn't know where the terms came from.
+Whiteout detects personal names, company names, addresses and other identifiable entities in your text, proposes aliases, and produces an anonymized version — entirely on-device. The only thing that leaves your machine is isolated lookup terms sent to [Touchstone](https://github.com/hazyhaar/touchstone-registry), a blind classification service that doesn't know where the terms came from.
+
+Available on **Chrome** (extension), **Android** and **macOS / iOS** (native apps). All platforms share the same TypeScript processing core.
 
 ## Install
 
-Chrome Web Store: *(coming soon)*
+| Platform | Status |
+|---|---|
+| Chrome Extension | *(coming soon)* |
+| Android (Google Play) | *(coming soon)* |
+| macOS / iOS (App Store) | *(coming soon)* |
 
-Manual install (development):
+Development install:
 ```bash
 git clone https://github.com/hazyhaar/whiteout-ext.git
 cd whiteout-ext
 npm install
-npm run build
-# Chrome → chrome://extensions → Developer mode → Load unpacked → select dist/
+npm run build              # all platforms
+npm run build:chrome       # Chrome extension only
+npm run build:android      # Android app (requires Android SDK)
+npm run build:apple        # macOS/iOS app (requires Xcode)
 ```
 
 ## How it works
 
-1. **Paste or select text** — paste into the extension popup, or right-click selected text on any page
+1. **Paste or select text** — paste into the app, or right-click selected text on any page (Chrome), or use the share sheet (mobile)
 2. **Entities are detected** — names, companies, addresses are highlighted in color
 3. **Aliases are proposed** — "Jean-Pierre Dupont" → "Marc Renaud", "SCI Les Lilas" → "Société 1"
 4. **You review and adjust** — accept, change, or skip any detection
 5. **Get your clean text** — copy or download the anonymized version
 
-Your original text never leaves the browser. Only isolated terms (individual words like "DUPONT" or "LYON") are sent to Touchstone for classification. Touchstone has no way to reconstruct your document from these fragments.
+Your original text never leaves the device. Only isolated terms (individual words like "DUPONT" or "LYON") are sent to Touchstone for classification. Touchstone has no way to reconstruct your document from these fragments.
 
 ## What stays local
 
@@ -35,7 +43,7 @@ Everything except the lookup:
 - Context assembly (figuring out "Jean-Pierre Dupont" is a full name)
 - Alias generation
 - Substitution
-- The mapping table (alias ↔ original) — stored in IndexedDB, never transmitted
+- The mapping table (alias ↔ original) — stored locally (IndexedDB on Chrome, SQLite on mobile), never transmitted
 
 ## What goes to Touchstone
 
@@ -60,96 +68,173 @@ Touchstone replies with classifications. Whiteout ignores the decoys. Touchstone
 
 ## Architecture
 
+The codebase is a monorepo. The processing engine (`packages/core`) is pure TypeScript with zero platform dependency. Each platform shell wraps the core with native UI and a JS runtime.
+
 ```
-┌─────────────────────────────────────────────────────┐
-│  CHROME EXTENSION                                     │
-│                                                       │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │ UI Layer (popup / sidebar / context menu)         │ │
-│  │                                                   │ │
-│  │  ┌─────────┐ ┌──────────┐ ┌─────────────────┐   │ │
-│  │  │ Input   │ │ Review   │ │ Output           │   │ │
-│  │  │ (paste/ │ │ (entities│ │ (anonymized text, │   │ │
-│  │  │  select/│ │  + alias │ │  copy/download)  │   │ │
-│  │  │  upload)│ │  editor) │ │                   │   │ │
-│  │  └────┬────┘ └────┬─────┘ └──────────────────┘   │ │
-│  └───────┼───────────┼───────────────────────────────┘ │
-│          │           │                                  │
-│  ┌───────┼───────────┼───────────────────────────────┐ │
-│  │ Processing Layer (service worker)                  │ │
-│  │                                                    │ │
-│  │  ┌──────────┐ ┌───────────┐ ┌──────────────────┐ │ │
-│  │  │Tokenizer │→│ Local     │→│ Touchstone       │ │ │
-│  │  │          │ │ Detector  │ │ Client           │ │ │
-│  │  └──────────┘ └───────────┘ └────────┬─────────┘ │ │
-│  │                                       │           │ │
-│  │  ┌──────────┐ ┌───────────┐ ┌────────┴─────────┐│ │
-│  │  │Assembler │←│ Alias     │←│ Decoy Mixer      ││ │
-│  │  │          │ │ Generator │ │                   ││ │
-│  │  └──────────┘ └───────────┘ └──────────────────┘│ │
-│  │                                                   │ │
-│  │  ┌──────────────────────────────────────────────┐│ │
-│  │  │ Local Store (IndexedDB)                       ││ │
-│  │  │ - alias ↔ original mapping                    ││ │
-│  │  │ - user corrections history                    ││ │
-│  │  │ - cached Touchstone responses                 ││ │
-│  │  └──────────────────────────────────────────────┘│ │
-│  └───────────────────────────────────────────────────┘ │
-└──────────────────────┬──────────────────────────────────┘
-                       │ MCP/QUIC or REST/HTTPS
-                       │ (isolated terms only)
-                       ▼
-              ┌──────────────────┐
-              │   TOUCHSTONE     │
-              │   (remote or     │
-              │    localhost)    │
-              └──────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                        PLATFORM SHELLS                              │
+│                                                                     │
+│  ┌──────────────┐   ┌──────────────────┐   ┌────────────────────┐  │
+│  │ Chrome Ext.  │   │ Android App      │   │ macOS / iOS App    │  │
+│  │              │   │                  │   │                    │  │
+│  │ popup.html   │   │ Kotlin UI        │   │ SwiftUI            │  │
+│  │ service      │   │ Jetpack Compose  │   │ JavaScriptCore     │  │
+│  │ worker (MV3) │   │ V8/Hermes via    │   │ (built into Apple  │  │
+│  │ content      │   │ aspect-bundled   │   │  platforms)        │  │
+│  │ script       │   │ JS runtime       │   │                    │  │
+│  │              │   │                  │   │ Share sheet ext.   │  │
+│  │ IndexedDB    │   │ SQLite           │   │ SQLite             │  │
+│  └──────┬───────┘   └────────┬─────────┘   └─────────┬──────────┘  │
+│         │                    │                        │             │
+│         └────────────────────┼────────────────────────┘             │
+│                              │                                      │
+│  ┌───────────────────────────┴───────────────────────────────────┐  │
+│  │ @whiteout/core  (pure TypeScript, zero DOM/platform deps)     │  │
+│  │                                                               │  │
+│  │  ┌──────────┐ ┌───────────┐ ┌──────────────────┐             │  │
+│  │  │Tokenizer │→│ Local     │→│ Touchstone       │             │  │
+│  │  │          │ │ Detector  │ │ Client           │             │  │
+│  │  └──────────┘ └───────────┘ └────────┬─────────┘             │  │
+│  │                                       │                       │  │
+│  │  ┌──────────┐ ┌───────────┐ ┌────────┴─────────┐            │  │
+│  │  │Assembler │←│ Alias     │←│ Decoy Mixer      │            │  │
+│  │  │          │ │ Generator │ │                   │            │  │
+│  │  └──────────┘ └───────────┘ └──────────────────┘            │  │
+│  │                                                               │  │
+│  │  types.ts · data/ (stop words, legal forms, alias pools)      │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │ REST/HTTPS (or MCP/QUIC on desktop)
+                           │ (isolated terms only)
+                           ▼
+                  ┌──────────────────┐
+                  │   TOUCHSTONE     │
+                  │   (remote or     │
+                  │    localhost)    │
+                  └──────────────────┘
 ```
 
-## Extension structure (Manifest V3)
+### Platform integration strategy
+
+| Concern | Chrome | Android | macOS / iOS |
+|---|---|---|---|
+| JS runtime | V8 (browser-native) | aspect-bundled Hermes or system WebView | JavaScriptCore (system) |
+| Core loading | `import` in service worker | Load compiled bundle at app startup, call via bridge | `JSContext.evaluateScript()`, call exported functions |
+| Local storage | IndexedDB | SQLite (Room) | SQLite (SwiftData / GRDB) |
+| Store adapter | `local-store.ts` (IndexedDB) | Kotlin adapter implementing `StorePort` | Swift adapter implementing `StorePort` |
+| Text input | Popup textarea + context menu | Share sheet + in-app textarea | Share sheet + in-app textarea |
+| Network | `fetch()` | `OkHttp` via bridge or `fetch()` in WebView | `URLSession` via bridge or `fetch()` in JSContext |
+| Distribution | Chrome Web Store | Google Play | App Store (universal binary) |
+
+The core exports a `StorePort` interface. Each platform provides its own implementation. The core never imports platform-specific APIs.
+
+```typescript
+// packages/core/src/ports.ts
+interface StorePort {
+  getAliasMap(sessionId: string): Promise<Map<string, string>>;
+  setAliasMap(sessionId: string, map: Map<string, string>): Promise<void>;
+  getCachedClassification(term: string): Promise<TouchstoneResult[] | null>;
+  setCachedClassification(term: string, results: TouchstoneResult[], ttlMs: number): Promise<void>;
+}
+
+interface FetchPort {
+  post(url: string, body: string, headers: Record<string, string>): Promise<{ status: number; body: string }>;
+}
+```
+
+## Monorepo structure
 
 ```
 whiteout-ext/
-├── manifest.json
-├── package.json
-├── tsconfig.json
-├── vite.config.ts              # or webpack — builder for the extension
-├── src/
-│   ├── background/
-│   │   └── service-worker.ts   # service worker (MV3)
-│   ├── popup/
-│   │   ├── popup.html          # main UI
-│   │   ├── popup.ts            # popup logic
-│   │   └── popup.css           # styles
-│   ├── content/
-│   │   └── content-script.ts   # context menu + selection handling
-│   ├── core/
-│   │   ├── tokenizer.ts        # text → tokens
-│   │   ├── local-detector.ts   # patterns, stop words, legal forms
-│   │   ├── touchstone-client.ts # batch classify via REST or MCP
-│   │   ├── decoy-mixer.ts      # injects noise terms
-│   │   ├── assembler.ts        # combines local + Touchstone results
-│   │   ├── alias-generator.ts  # produces replacement names/addresses
-│   │   ├── substituter.ts      # applies aliases to original text
-│   │   └── types.ts            # shared type definitions
-│   ├── data/
-│   │   ├── stop-words/
-│   │   │   ├── fr.json
-│   │   │   ├── en.json
-│   │   │   └── de.json
-│   │   ├── legal-forms.json    # SCI, SARL, GmbH, Ltd, PLC, LLC...
-│   │   ├── street-types.json   # rue, avenue, street, road, Straße...
-│   │   ├── alias-firstnames.json  # replacement first names pool
-│   │   ├── alias-surnames.json    # replacement surnames pool
-│   │   └── alias-companies.json   # replacement company names pool
-│   └── store/
-│       └── local-store.ts      # IndexedDB wrapper for alias tables
-├── dist/                       # built extension
+├── package.json                   # npm workspaces root
+├── tsconfig.base.json             # shared TS config
+├── packages/
+│   ├── core/                      # @whiteout/core — shared processing engine
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   ├── src/
+│   │   │   ├── index.ts           # public API: pipeline(), tokenize(), detect(), classify(), assemble(), substitute()
+│   │   │   ├── tokenizer.ts
+│   │   │   ├── local-detector.ts
+│   │   │   ├── touchstone-client.ts
+│   │   │   ├── decoy-mixer.ts
+│   │   │   ├── assembler.ts
+│   │   │   ├── alias-generator.ts
+│   │   │   ├── substituter.ts
+│   │   │   ├── ports.ts           # StorePort, FetchPort interfaces
+│   │   │   └── types.ts
+│   │   ├── data/
+│   │   │   ├── stop-words/
+│   │   │   │   ├── fr.json
+│   │   │   │   ├── en.json
+│   │   │   │   └── de.json
+│   │   │   ├── legal-forms.json
+│   │   │   ├── street-types.json
+│   │   │   ├── alias-firstnames.json
+│   │   │   ├── alias-surnames.json
+│   │   │   └── alias-companies.json
+│   │   └── __tests__/             # vitest, platform-independent
+│   │       ├── tokenizer.test.ts
+│   │       ├── local-detector.test.ts
+│   │       ├── assembler.test.ts
+│   │       └── substituter.test.ts
+│   │
+│   ├── chrome/                    # Chrome extension shell
+│   │   ├── package.json
+│   │   ├── manifest.json
+│   │   ├── vite.config.ts
+│   │   ├── src/
+│   │   │   ├── background/
+│   │   │   │   └── service-worker.ts
+│   │   │   ├── popup/
+│   │   │   │   ├── popup.html
+│   │   │   │   ├── popup.ts
+│   │   │   │   └── popup.css
+│   │   │   ├── content/
+│   │   │   │   └── content-script.ts
+│   │   │   └── adapters/
+│   │   │       ├── idb-store.ts       # StorePort → IndexedDB
+│   │   │       └── fetch-adapter.ts   # FetchPort → browser fetch()
+│   │   └── dist/
+│   │
+│   ├── android/                   # Android app shell
+│   │   ├── app/
+│   │   │   ├── build.gradle.kts
+│   │   │   └── src/main/
+│   │   │       ├── java/.../whiteout/
+│   │   │       │   ├── MainActivity.kt
+│   │   │       │   ├── WhiteoutEngine.kt      # loads core bundle, exposes Kotlin API
+│   │   │       │   ├── ShareActivity.kt       # handles share sheet intents
+│   │   │       │   └── adapters/
+│   │   │       │       ├── RoomStore.kt       # StorePort → Room/SQLite
+│   │   │       │       └── OkHttpFetch.kt     # FetchPort → OkHttp
+│   │   │       ├── res/
+│   │   │       └── AndroidManifest.xml
+│   │   ├── build.gradle.kts
+│   │   ├── settings.gradle.kts
+│   │   └── core-bundle/              # compiled @whiteout/core JS bundle (generated)
+│   │
+│   └── apple/                     # macOS + iOS app shell (universal)
+│       ├── Whiteout.xcodeproj
+│       ├── Whiteout/
+│       │   ├── WhiteoutApp.swift
+│       │   ├── ContentView.swift
+│       │   ├── WhiteoutEngine.swift       # JSContext wrapper, loads core bundle
+│       │   ├── ShareExtension/
+│       │   │   └── ShareViewController.swift
+│       │   ├── Adapters/
+│       │   │   ├── SQLiteStore.swift       # StorePort → SQLite
+│       │   │   └── URLSessionFetch.swift   # FetchPort → URLSession
+│       │   └── Resources/
+│       │       └── core-bundle.js         # compiled @whiteout/core (generated)
+│       └── WhiteoutTests/
+│
 ├── LICENSE
 └── README.md
 ```
 
-## manifest.json (Chrome Manifest V3)
+## manifest.json (Chrome shell — Manifest V3)
 
 ```json
 {
@@ -247,7 +332,7 @@ interface DetectedGroup {
 1. **Legal form grouping**: scan for known legal forms (from `legal-forms.json`). When found, group the legal form + following capitalized words as one entity.
    - "SCI Les Lilas" → one group, localType="company_candidate", confidence="probable"
    - "SARL Dupont Menuiserie" → one group
-   - Legal forms list (shipped with extension):
+   - Legal forms list (shipped with core):
      ```json
      {
        "fr": ["SCI", "SARL", "SAS", "SA", "EURL", "SASU", "GIE", "SNC", "SCA", "SCOP", "SEL"],
@@ -397,7 +482,7 @@ type EntityType = "person" | "company" | "address" | "city" | "email" | "phone" 
 
 **Consistency**: a `Map<string, string>` stored in session. If "Dupont" was aliased to "Renaud" the first time, every subsequent "Dupont" in the same document gets "Renaud". This map is the alias table. It lives in IndexedDB, never sent anywhere.
 
-**Alias pools** (shipped with extension):
+**Alias pools** (shipped with core):
 
 `alias-firstnames.json` (~500 entries per gender, French + English):
 ```json
@@ -472,12 +557,19 @@ Simple string surgery. No intelligence.
 - Download alias table as CSV button (for the user's own records)
 - "New document" button (clears everything, generates fresh alias set)
 
-### Context menu
+### Context menu (Chrome)
 
 Right-click on any web page with text selected:
 - "Whiteout: Anonymize selection" → opens popup with selected text pre-filled
 
-### Settings (accessible from popup gear icon)
+### Share sheet (Android / iOS)
+
+Select text in any app → Share → Whiteout:
+- Opens Whiteout with the selected text pre-filled in the Review panel
+- On Android: `ShareActivity` receives `Intent.ACTION_SEND` with `text/plain`
+- On iOS: Share Extension receives text via `NSExtensionItem`, forwards to main app via App Group
+
+### Settings (accessible from popup gear icon / app settings)
 
 - **Touchstone server**: URL input, default `http://localhost:8420`. Test connection button.
 - **Jurisdictions**: checkboxes for which jurisdictions to query (fr, uk, de, us...). Default: auto from detected language.
@@ -491,7 +583,7 @@ Right-click on any web page with text selected:
 
 ---
 
-## Data files — Embedded in extension
+## Data files — Embedded in `@whiteout/core`
 
 ### Stop words
 
@@ -588,11 +680,11 @@ const result = await mcpClient.callTool("classify_batch", {
 
 ## Privacy guarantees
 
-1. **Document never transmitted** — only isolated terms leave the browser
+1. **Document never transmitted** — only isolated terms leave the device
 2. **Terms shuffled** — order randomized before sending
 3. **Decoy injection** — 30-50% fake terms mixed in
 4. **No session** — Touchstone has no cookies, no tokens, no IP logging
-5. **Alias table local-only** — the mapping (original ↔ alias) stays in IndexedDB
+5. **Alias table local-only** — the mapping (original ↔ alias) stays in IndexedDB (Chrome) or SQLite (mobile)
 6. **Cache reduces exposure** — previously classified terms are not re-sent
 7. **Works offline** — if Touchstone unreachable, local detection still works (patterns, legal forms), only dictionary-based classification is degraded
 8. **Open source** — all code is auditable, AGPL-free (Apache 2.0)
@@ -602,22 +694,52 @@ const result = await mcpClient.callTool("classify_batch", {
 ## Build & development
 
 ```bash
-# Install dependencies
+# Install all workspace dependencies
 npm install
 
-# Dev mode with hot reload
-npm run dev
-# → loads unpacked extension from dist/, watches for changes
+# ── Core ──
+npm run -w packages/core build        # compile core to ESM + CJS
+npm run -w packages/core test         # vitest (platform-independent)
+npm run -w packages/core typecheck    # tsc --noEmit
 
-# Production build
-npm run build
-# → dist/ ready for Chrome Web Store upload
+# ── Chrome ──
+npm run -w packages/chrome dev        # vite dev with hot reload → load dist/ as unpacked extension
+npm run -w packages/chrome build      # production build → dist/ ready for Chrome Web Store
 
-# Run tests
-npm test
+# ── Android ──
+npm run build:android                 # 1) build core bundle  2) copy to android/core-bundle/  3) run ./gradlew assembleDebug
+# Or manually:
+npm run -w packages/core bundle:iife  # produce single-file IIFE bundle for embedding
+cp packages/core/dist/whiteout-core.iife.js packages/android/core-bundle/
+cd packages/android && ./gradlew assembleDebug
 
-# Type check
-npm run typecheck
+# ── Apple (macOS / iOS) ──
+npm run build:apple                   # 1) build core bundle  2) copy to apple/Whiteout/Resources/  3) xcodebuild
+# Or manually:
+npm run -w packages/core bundle:iife
+cp packages/core/dist/whiteout-core.iife.js packages/apple/Whiteout/Resources/core-bundle.js
+cd packages/apple && xcodebuild -scheme Whiteout -destination 'generic/platform=iOS'
+
+# ── All platforms ──
+npm run build                         # build core + chrome + android + apple
+npm test                              # run all tests (core unit + chrome e2e)
+```
+
+### Root `package.json` (npm workspaces)
+
+```json
+{
+  "private": true,
+  "workspaces": ["packages/core", "packages/chrome"],
+  "scripts": {
+    "build": "npm run -w packages/core build && npm run -w packages/chrome build",
+    "build:chrome": "npm run -w packages/chrome build",
+    "build:android": "npm run -w packages/core bundle:iife && node scripts/copy-core-android.js && cd packages/android && ./gradlew assembleDebug",
+    "build:apple": "npm run -w packages/core bundle:iife && node scripts/copy-core-apple.js && cd packages/apple && xcodebuild -scheme Whiteout",
+    "test": "npm run -w packages/core test",
+    "typecheck": "npm run -w packages/core typecheck"
+  }
+}
 ```
 
 ### Dependencies (minimal)
@@ -633,29 +755,40 @@ npm run typecheck
 }
 ```
 
-No React. No framework. Vanilla TypeScript + DOM APIs. The UI is simple enough that a framework would be overhead. CSS is vanilla with CSS custom properties for theming.
+No React. No framework. Vanilla TypeScript + DOM APIs for Chrome. Kotlin Compose for Android. SwiftUI for Apple. Each platform uses its idiomatic UI toolkit. CSS is vanilla with CSS custom properties for theming (Chrome only).
 
 ---
 
 ## What to build first (priority order)
 
-1. **Tokenizer + Local Detector** — the core text processing, no network needed
-2. **Popup UI** — input panel + review panel with hardcoded test entities
-3. **Touchstone Client** — REST batch call to localhost
-4. **Assembler** — combine local + Touchstone results
-5. **Alias Generator + Substituter** — produce the anonymized output
-6. **Context menu integration** — right-click → anonymize selection
-7. **Decoy Mixer** — privacy layer for Touchstone calls
-8. **Settings panel** — Touchstone URL, jurisdictions, privacy options
-9. **IndexedDB cache** — avoid re-querying known terms
-10. **MCP/QUIC transport** — when Touchstone chassis is ready
+### Phase 1 — Core engine (`@whiteout/core`)
+1. **Types + Ports** — `types.ts`, `ports.ts` (StorePort, FetchPort interfaces)
+2. **Tokenizer + Local Detector** — core text processing, no network needed
+3. **Touchstone Client** — REST batch call via FetchPort
+4. **Decoy Mixer** — privacy layer for Touchstone calls
+5. **Assembler** — combine local + Touchstone results
+6. **Alias Generator + Substituter** — produce the anonymized output
+7. **`pipeline()` orchestrator** — single function: text in → entities + anonymized text out
+8. **Core tests** — vitest, 100% platform-independent
+
+### Phase 2 — Chrome extension
+9. **Chrome adapters** — IndexedDB store, browser fetch
+10. **Popup UI** — input + review + output panels
+11. **Context menu** — right-click → anonymize selection
+12. **Settings panel** — Touchstone URL, jurisdictions, decoy ratio
+
+### Phase 3 — Mobile apps
+13. **Core IIFE bundle** — single-file build for embedding in native apps
+14. **Android shell** — Kotlin/Compose UI, Room store adapter, share sheet intent
+15. **Apple shell** — SwiftUI, JavaScriptCore engine wrapper, SQLite store, share extension
+16. **MCP/QUIC transport** — when Touchstone chassis is ready (desktop only)
 
 ---
 
 ## What this project is NOT
 
 - Not a NER engine — it uses Touchstone for classification, local heuristics for grouping
-- Not a document editor — it takes text in, gives text out, doesn't modify the original
+- Not a document editor — it takes text in, gives text out, doesn't modify the original source
 - Not a VPN or proxy — it doesn't route traffic, it processes text locally
 - Not an anonymization certifier — it helps anonymize, but the user is responsible for reviewing the output
 - Not Touchstone — Touchstone is the infrastructure, Whiteout is the user-facing product
