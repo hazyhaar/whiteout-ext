@@ -2,9 +2,38 @@
 
 ## Résumé exécutif
 
-Le plan technique dans le README est **solide sur le fond architectural** : moteur TypeScript pur partagé, modèle port/adapter, pipeline linéaire de traitement. Cependant, **plusieurs choix technologiques sont datés ou imprécis** et doivent être mis à jour avant le début de l'implémentation.
+Le plan technique dans le README est **solide sur le fond architectural** : moteur TypeScript pur partagé, modèle port/adapter, pipeline linéaire de traitement. L'analyse du repo `hazyhaar/pkg` confirme que l'infrastructure MCP-over-QUIC existe et que le plan s'insère dans un écosystème HOROS cohérent.
 
-**Verdict** : Le plan nécessite des corrections ciblées (pas une refonte) sur 7 points identifiés ci-dessous.
+**Verdict** : Le plan nécessite des corrections ciblées (pas une refonte) sur 8 points identifiés ci-dessous. Le point le plus critique est la mise à jour des versions de dépendances et le remplacement du framework de build Chrome.
+
+---
+
+## 0. Contexte écosystème — `hazyhaar/pkg` (HOROS shared packages)
+
+L'audit a été complété par l'analyse du repo `hazyhaar/pkg`, un monorepo Go qui fournit l'infrastructure partagée de l'écosystème HOROS. Les packages pertinents pour Whiteout :
+
+| Package | Rôle | Pertinence pour Whiteout |
+|---|---|---|
+| **`mcpquic`** | Transport MCP-over-QUIC réel (ALPN `mcp-quic-v1`, magic bytes `MCP1`, JSON-RPC sur stream QUIC) | **Directe** — c'est le transport que le plan Whiteout référence |
+| **`chassis`** | Serveur unifié HTTP/1.1 + HTTP/2 + HTTP/3 + MCP-QUIC sur un seul port (démux ALPN) | **Directe** — c'est probablement ce sur quoi tourne Touchstone |
+| **`connectivity`** | Smart router SQLite avec factories HTTP et MCP-QUIC, circuit breaker, retry, fallback | **Directe** — implémente la chaîne de fallback décrite dans le plan |
+| **`kit`** | Endpoints transport-agnostic (même fonction sert HTTP et MCP), middleware composable | **Directe** — pattern architectural de Touchstone |
+| **`mcprt`** | Registre dynamique d'outils MCP (SQLite-backed, hot-reload) | **Indirecte** — les outils `classify_batch` de Touchstone y sont probablement définis |
+| **`audit`** | Audit log asynchrone SQLite | **Indirecte** — logging des actions d'anonymisation |
+| **`idgen`** | Génération d'IDs (NanoID, UUIDv7, préfixés) | **Indirecte** — convention d'ID de l'écosystème |
+| **`watch`** | Détection de changements SQLite (poll `PRAGMA data_version`) | **Indirecte** — utilisé par mcprt et connectivity |
+| **`observability`** | Stack monitoring SQLite-native (métriques, heartbeat, audit) | **Indirecte** |
+| **`sas_ingester`** | Pipeline d'ingestion de fichiers avec détection d'injection de prompt | **Parallèle** — patterns de sécurité similaires |
+
+### Implications clés
+
+1. **MCP/QUIC est une réalité dans l'écosystème HOROS** — `mcpquic` est une implémentation production-grade avec client/serveur, ALPN, magic bytes, session management. Mon analyse initiale (sans accès à `pkg`) qui recommandait de retirer MCP/QUIC était **erronée**.
+
+2. **La chaîne de fallback du plan est cohérente** avec le package `connectivity` qui supporte exactement les stratégies `quic`, `http`, `local`, `noop` avec circuit breaker et retry intégrés.
+
+3. **Le pattern kit.Endpoint** (même business logic servie via HTTP et MCP) confirme que Touchstone expose ses endpoints sur les deux transports simultanément via le chassis.
+
+4. **Le client TypeScript MCP-QUIC reste à écrire** — `mcpquic` est en Go. L'extension Chrome et les apps mobiles auront besoin d'un client TypeScript/JS qui implémente le même protocole (ALPN `mcp-quic-v1`, magic `MCP1`, JSON-RPC newline-delimited sur QUIC stream). C'est un effort non-trivial.
 
 ---
 
@@ -77,35 +106,47 @@ WXT est le framework d'extension navigateur dominant en 2026 :
 
 ---
 
-## 3. MCP/QUIC — RETIRER du plan
+## 3. MCP/QUIC — CONSERVER, mais clarifier le client TypeScript
 
-### Constat
+### Constat initial (corrigé)
 
-Le README mentionne une chaîne de fallback :
-```
-MCP/QUIC → REST/HTTPS → REST/HTTP (localhost) → offline
-```
+L'analyse initiale sans accès à `hazyhaar/pkg` concluait que MCP/QUIC n'existait pas. **C'était faux.**
 
-Et des exemples de code MCP :
+### Réalité après examen de `pkg`
+
+Le package `mcpquic` dans `hazyhaar/pkg` est une **implémentation production-grade** de MCP-over-QUIC :
+- Protocole ALPN `"mcp-quic-v1"` pour la négociation TLS
+- Magic bytes `"MCP1"` en handshake de stream
+- JSON-RPC newline-delimited sur streams QUIC bidirectionnels
+- Client Go complet (`Connect()` → `ListTools()` / `CallTool()` / `Ping()`)
+- Serveur avec deux modes : `Handler` (intégré au chassis) et `Listener` (standalone)
+- Session management avec notifications push (channel buffered, cap 100)
+- Config production (TLS 1.3, fenêtres QUIC 10/50 MB) et dev (certs auto-signés)
+
+Le `chassis` sert HTTP/1.1 + HTTP/2 + HTTP/3 + MCP-QUIC sur **un seul port** via ALPN demux. Le `connectivity` router implémente exactement la chaîne de fallback MCP → HTTP → local → noop avec circuit breaker et retry.
+
+### Ce qui manque dans le plan Whiteout
+
+Le plan décrit le client MCP côté TypeScript comme une simple ligne :
 ```typescript
 const result = await mcpClient.callTool("classify_batch", { ... });
 ```
 
-### Problèmes identifiés
+Mais **il n'existe pas de client MCP-over-QUIC en TypeScript/JavaScript**. Le client dans `pkg/mcpquic` est en Go. L'implémentation côté extension Chrome nécessite :
 
-- **"MCP/QUIC" n'existe pas** en tant que transport utilisable. Il existe un Internet-Draft IETF préliminaire (octobre 2025) pour "MCP over MOQT" (Media over QUIC Transport), mais aucun SDK ne l'implémente.
-- **MCP est un protocole d'intégration d'outils IA**, pas un transport généraliste. Chaque concept (tools, resources, prompts, sampling) est orienté vers un modèle de langage qui consomme du contexte. Un service de classification dictionnaire ne correspond pas à ce modèle mental.
-- **Complexité inutile** : l'interaction Touchstone est simple (POST batch de termes → réponse classifications). MCP ajouterait la négociation de capacités, le session management, le framing JSON-RPC — pour un seul endpoint REST.
-- **Pas de bénéfice écosystème** : Touchstone est un backend privé pour Whiteout, pas un outil généraliste IA. Aucun client MCP tiers n'en bénéficierait.
+1. **Un transport QUIC dans le navigateur** — WebTransport (basé sur HTTP/3) est le seul accès QUIC disponible dans un navigateur. Il ne supporte pas l'ALPN custom `mcp-quic-v1`. C'est un **blocker** pour l'extension Chrome.
+
+2. **Sur desktop/mobile** — un client QUIC natif (via un binding ou une lib comme `libquiche` en WASM) serait techniquement possible mais très lourd.
 
 ### Recommandation
 
-Simplifier la chaîne de fallback :
-```
-REST/HTTPS → REST/HTTP (localhost uniquement) → mode offline
-```
-
-Retirer toute mention de MCP/QUIC du plan. Si Touchstone évolue un jour vers un outil IA exposé publiquement, MCP pourra être ajouté à ce moment-là — mais c'est du design spéculatif.
+- **Conserver MCP/QUIC dans le plan** comme transport de Phase 3 (mobile/desktop).
+- **Clarifier que MCP-QUIC n'est PAS disponible dans l'extension Chrome** — le navigateur ne supporte pas l'ALPN custom requis. L'extension utilisera toujours REST/HTTPS.
+- **Pour Android/iOS** — le client MCP-QUIC peut être implémenté nativement (Kotlin/Swift) sans passer par le core TypeScript, en se connectant directement au chassis.
+- **Adapter la chaîne de fallback par plateforme** :
+  - Chrome : `REST/HTTPS → REST/HTTP localhost → offline`
+  - Android/iOS : `MCP-QUIC → REST/HTTPS → REST/HTTP localhost → offline`
+- **Ajouter au plan** : une tâche Phase 3 explicite "Implémenter client MCP-QUIC natif pour Kotlin (Android) et Swift (iOS)".
 
 ---
 
@@ -155,9 +196,9 @@ Le service worker enregistre le context menu et utilise `chrome.scripting.execut
 ]
 ```
 
-**Problème** : `touchstone.example.org` est un placeholder. Le domaine réel doit être déterminé ou rendu configurable. Si le Touchstone est self-hosted uniquement, seul `localhost` est nécessaire.
+**Problème** : `touchstone.example.org` est un placeholder. Le domaine réel doit être déterminé ou rendu configurable.
 
-**Recommandation** : clarifier la stratégie de déploiement Touchstone. Si Touchstone est toujours local, ne garder que `http://localhost:8420/*`. Si un service distant est prévu, utiliser `optional_host_permissions` pour éviter un avertissement de permission lors de l'installation.
+**Recommandation** : vu que le chassis HOROS sert tout sur un seul port, clarifier l'adresse réelle. Si Touchstone est principalement self-hosted, ne garder que `http://localhost:8420/*` dans les permissions statiques et utiliser `optional_host_permissions` pour les serveurs distants.
 
 ---
 
@@ -193,6 +234,8 @@ Pour le cas Whiteout (traitement de texte batch, pas de calcul intensif continu)
 
 Le plan devrait spécifier concrètement quelle bibliothèque sera utilisée et retirer la mention vague "V8/Hermes via aspect-bundled".
 
+**Note** : pour la partie MCP-QUIC sur Android, le client serait implémenté en Kotlin natif (pas via le core TS), en utilisant une lib QUIC Kotlin/Java. Le core TS ne gère que le pipeline de traitement, pas le transport.
+
 ---
 
 ## 6. Architecture — Points forts confirmés
@@ -203,6 +246,11 @@ Les éléments suivants du plan sont **solides et ne nécessitent pas de modific
 - La décomposition en 7 modules (Tokenizer → Local Detector → Touchstone Client → Decoy Mixer → Assembler → Alias Generator → Substituter) est propre et testable.
 - Le pattern port/adapter (StorePort, FetchPort) est le bon choix pour le multi-plateforme.
 - Le core zero-DOM/zero-platform est correct.
+
+### Alignement avec l'écosystème `pkg`
+- Le `FetchPort` de Whiteout s'inscrit dans le pattern `kit.Endpoint` de `pkg` — le même endpoint Touchstone sert HTTP et MCP.
+- Le `StorePort` s'aligne avec l'utilisation de SQLite partout dans `pkg` (mcprt, connectivity, audit, observability).
+- La chaîne de fallback correspond aux stratégies du `connectivity.Router`.
 
 ### Modèle de confidentialité
 - Le mélange de decoys (30-50%) est un bon mécanisme de k-anonymité.
@@ -252,24 +300,41 @@ Le plan liste des tests pour tokenizer, local-detector, assembler, substituter �
 - `touchstone-client` (mocks du FetchPort)
 - Le `pipeline()` orchestrateur (test d'intégration)
 
+### 7.6. Protocole Touchstone — aligner avec `pkg/kit`
+
+Le plan décrit l'API Touchstone comme un simple REST :
+```typescript
+POST /v1/classify/batch { terms, jurisdictions }
+```
+
+Mais côté serveur, Touchstone utilise probablement le pattern `kit.Endpoint` + `kit.RegisterMCPTool()`. Il serait utile d'aligner la spec du `touchstone-client.ts` avec le format réel des payloads `kit.Endpoint` (request/response JSON marshalés) et le nom de l'outil MCP tel que défini dans `mcprt` (probablement `classify_batch`).
+
+### 7.7. Convention d'ID — aligner avec `pkg/idgen`
+
+L'écosystème HOROS utilise `idgen` (NanoID base-36, UUIDv7, préfixes). Le plan Whiteout ne mentionne pas de stratégie d'ID pour les sessions, les alias maps, etc. Adopter les conventions `idgen` (ex: `sess_` pour les sessions, `alias_` pour les maps) assurerait la cohérence avec le reste de l'écosystème.
+
 ---
 
 ## Résumé des actions
 
 | # | Action | Priorité | Impact |
 |---|---|---|---|
-| 1 | Mettre à jour les versions cibles (TS 5.9, Vite 7, Vitest 4) | Haute | Build cassé sinon |
-| 2 | Remplacer @crxjs/vite-plugin par WXT | Haute | Maintenance, fonctionnalités |
-| 3 | Retirer MCP/QUIC du plan | Moyenne | Clarté, réalisme |
-| 4a | Retirer `<all_urls>`, utiliser activeTab + scripting | Haute | Rejet Web Store |
+| 1 | Mettre à jour les versions cibles (TS 5.9, Vite 7, Vitest 4) | **Haute** | Build cassé sinon |
+| 2 | Remplacer @crxjs/vite-plugin par WXT | **Haute** | Maintenance, fonctionnalités |
+| 3 | ~~Retirer MCP/QUIC~~ → Conserver, clarifier par plateforme (Chrome=REST only, mobile=MCP-QUIC natif) | **Haute** | Réalisme, faisabilité |
+| 4a | Retirer `<all_urls>`, utiliser activeTab + scripting | **Haute** | Rejet Web Store |
 | 4b | Ajouter `unlimitedStorage` | Moyenne | Éviction données |
 | 4c | Clarifier host_permissions (Touchstone local vs distant) | Moyenne | Clarté |
 | 5 | Spécifier le runtime JS Android (QuickJS recommandé) | Moyenne | Faisabilité |
 | 6 | Ajouter stratégie keep-alive service worker | Moyenne | Fiabilité |
 | 7 | Corriger l'incohérence Brésil (scope langues) | Basse | Cohérence |
-| 8 | Renforcer les regex tokenizer | Basse | Qualité détection |
-| 9 | Ajouter les tests manquants au plan | Moyenne | Couverture |
+| 8 | Renforcer les regex tokenizer (email, IBAN, SSN Corse) | Basse | Qualité détection |
+| 9 | Ajouter les tests manquants au plan (decoy-mixer, alias-generator, touchstone-client, pipeline) | Moyenne | Couverture |
+| 10 | Aligner protocole Touchstone avec le format `kit.Endpoint` réel | Moyenne | Interopérabilité |
+| 11 | Adopter les conventions `idgen` de l'écosystème HOROS | Basse | Cohérence |
 
 ---
 
-*Audit réalisé le 17 février 2026 — basé sur une recherche de fraîcheur des technologies référencées.*
+*Audit réalisé le 17 février 2026.*
+*V1 : basé sur recherche de fraîcheur technologique uniquement.*
+*V2 : complété avec l'analyse de `hazyhaar/pkg` — correction majeure sur MCP/QUIC (point 3).*
