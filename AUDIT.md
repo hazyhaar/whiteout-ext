@@ -332,9 +332,140 @@ L'écosystème HOROS utilise `idgen` (NanoID base-36, UUIDv7, préfixes). Le pla
 | 9 | Ajouter les tests manquants au plan (decoy-mixer, alias-generator, touchstone-client, pipeline) | Moyenne | Couverture |
 | 10 | Aligner protocole Touchstone avec le format `kit.Endpoint` réel | Moyenne | Interopérabilité |
 | 11 | Adopter les conventions `idgen` de l'écosystème HOROS | Basse | Cohérence |
+| 12 | Configurer `_txlock=immediate` + double pool read/write pour les packages SQLite | Moyenne | Fiabilité |
+
+---
+
+## 8. SQLite modernc.org/sqlite — `BEGIN IMMEDIATE` et patterns de concurrence
+
+### Contexte
+
+L'écosystème HOROS utilise `modernc.org/sqlite` (pur Go, pas de CGO) comme base de données embarquée dans 6 packages. L'audit porte sur la pertinence de `BEGIN IMMEDIATE` pour chacun.
+
+### Rappel : types de transactions SQLite
+
+| Type | Lock acquis | Comportement |
+|---|---|---|
+| `BEGIN DEFERRED` (défaut) | Aucun avant la 1ère instruction | Read → SHARED, Write → RESERVED. Upgrade SHARED→RESERVED peut échouer avec SQLITE_BUSY mid-transaction |
+| `BEGIN IMMEDIATE` | RESERVED au `BEGIN` | Bloque les autres writers dès le début, readers non affectés (WAL). BUSY arrive au `BEGIN`, pas mid-transaction |
+| `BEGIN EXCLUSIVE` | EXCLUSIVE au `BEGIN` | Bloque tout (readers inclus). Contre-productif en WAL |
+
+Le problème avec `DEFERRED` : une transaction qui commence par des lectures puis écrit doit upgrader son lock. Si une autre connexion a acquis RESERVED entre-temps → `SQLITE_BUSY` mid-transaction, rollback obligatoire, état applicatif potentiellement incohérent.
+
+Avec `IMMEDIATE` : le BUSY arrive au `BEGIN`, avant toute logique métier. Le `busy_timeout` de SQLite gère le retry automatiquement.
+
+### Analyse par package HOROS
+
+| Package | Pattern d'accès | Écriture concurrente ? | `BEGIN IMMEDIATE` pertinent ? |
+|---|---|---|---|
+| **audit** | Append-only, haute fréquence, N goroutines | **Oui, forte** | **Oui — critique** (ou single writer goroutine) |
+| **connectivity** | Circuit breaker, état routes, burst en cas de panne | **Oui, burst** | **Oui — modéré** |
+| **mcprt** | Registration, hot-reload concurrent | **Oui, rare** | **Oui — modéré** |
+| **Touchstone** (dictionnaires) | Read-only en service, ingestion admin batch | **Non** | **Non** |
+| **watch** | `PRAGMA data_version` polling | **Non (lecture seule)** | **Non** |
+| **observability** | Métriques périodiques, 1 goroutine | **Non (sérialisé)** | **Non** |
+
+### Spécificités modernc.org/sqlite
+
+1. **Pur Go** — le code C de SQLite est transpilé via ccgo. ~2-3x plus lent que CGO-sqlite3 sur le CPU-bound, identique pour les I/O.
+
+2. **`_txlock` dans le DSN** — supporté depuis modernc v1.30+ :
+   ```
+   file:data.db?_txlock=immediate&_pragma=journal_mode(wal)&_pragma=busy_timeout(5000)
+   ```
+   Avant v1.30, il faut manuellement `ROLLBACK` + `BEGIN IMMEDIATE` après `db.BeginTx()`.
+
+3. **Pas de connection pooling intelligent** — `database/sql` gère un pool, mais SQLite ne supporte qu'un writer à la fois. Le pool doit être configuré explicitement.
+
+### Pattern recommandé : double pool read/write
+
+Le pattern idiomatique Go + SQLite pour les services concurrents :
+
+```go
+const baseDSN = "file:%s?_pragma=journal_mode(wal)&_pragma=busy_timeout(5000)&_pragma=synchronous(normal)&_pragma=foreign_keys(on)"
+
+// Write handle — 1 connexion, écritures sérialisées, IMMEDIATE par défaut
+func openWriter(path string) (*sql.DB, error) {
+    dsn := fmt.Sprintf(baseDSN+"&_txlock=immediate", path)
+    db, err := sql.Open("sqlite", dsn)
+    if err != nil {
+        return nil, err
+    }
+    db.SetMaxOpenConns(1)
+    db.SetConnMaxLifetime(0)
+    return db, nil
+}
+
+// Read pool — N connexions, lectures parallèles, pas de lock
+func openReader(path string) (*sql.DB, error) {
+    dsn := fmt.Sprintf(baseDSN, path)
+    db, err := sql.Open("sqlite", dsn)
+    if err != nil {
+        return nil, err
+    }
+    db.SetMaxOpenConns(max(4, runtime.NumCPU()))
+    db.SetConnMaxLifetime(0)
+    return db, nil
+}
+```
+
+Avantages :
+- Les lectures ne sont jamais bloquées par les écritures (WAL)
+- Les écritures sont sérialisées par `MaxOpenConns(1)` — `BEGIN IMMEDIATE` est un safety net défensif
+- Aucune SQLITE_BUSY possible côté applicatif
+- Pas de retry logic à implémenter
+
+### Alternative : single writer goroutine
+
+Pour les packages à très haute fréquence d'écriture (audit), un channel dédié élimine la contention à la racine :
+
+```go
+type Writer struct {
+    ch chan func(tx *sql.Tx) error
+}
+
+func (w *Writer) run(db *sql.DB) {
+    for fn := range w.ch {
+        tx, _ := db.BeginTx(context.Background(), nil)
+        if err := fn(tx); err != nil {
+            tx.Rollback()
+            continue
+        }
+        tx.Commit()
+    }
+}
+```
+
+Un seul goroutine écrit, pas de contention, pas besoin de `BEGIN IMMEDIATE`. Le trade-off est la latence du channel (négligeable pour l'audit log).
+
+### Pragmas recommandés
+
+```
+_pragma=journal_mode(wal)       -- concurrent readers + 1 writer
+_pragma=busy_timeout(5000)      -- retry automatique pendant 5s si BUSY
+_pragma=synchronous(normal)     -- safe en WAL, 2x plus rapide que FULL
+_pragma=foreign_keys(on)        -- intégrité référentielle
+_pragma=cache_size(-64000)      -- 64 MB de cache (optionnel, pour Touchstone dictionnaires)
+```
+
+### `BEGIN EXCLUSIVE` — à éviter
+
+En WAL mode, `EXCLUSIVE` empêche les readers en plus des writers. Aucun package HOROS n'a besoin de ce niveau d'isolation. `IMMEDIATE` suffit dans tous les cas.
+
+### Verdict
+
+| Recommandation | Priorité |
+|---|---|
+| Activer WAL + `busy_timeout(5000)` sur **tous** les packages SQLite | **Haute** |
+| Utiliser `_txlock=immediate` dans le DSN du write handle | **Haute** (safety net quasi gratuit) |
+| Double pool read/write pour les packages à lectures concurrentes (Touchstone, connectivity) | **Moyenne** |
+| Single writer goroutine pour l'audit log si la fréquence le justifie | **Moyenne** |
+| Vérifier la version de modernc dans `go.mod` (≥v1.30 requis pour `_txlock`) | **Haute** |
+| Ne jamais utiliser `BEGIN EXCLUSIVE` en WAL mode | Convention |
 
 ---
 
 *Audit réalisé le 17 février 2026.*
 *V1 : basé sur recherche de fraîcheur technologique uniquement.*
 *V2 : complété avec l'analyse de `hazyhaar/pkg` — correction majeure sur MCP/QUIC (point 3).*
+*V3 : ajout de l'audit modernc.org/sqlite — `BEGIN IMMEDIATE`, double pool, pragmas (point 8).*
