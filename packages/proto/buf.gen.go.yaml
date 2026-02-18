@@ -1,0 +1,10 @@
+version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: gen/go
+  - remote: buf.build/connectrpc/go
+    out: gen/go
+  - remote: buf.build/community/planetscale-vtprotobuf
+    out: gen/go
+    opt:
+      - features=marshal+unmarshal+size+pool

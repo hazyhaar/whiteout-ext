@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Whiteout</title>
+  <link rel="stylesheet" href="./popup.css">
+</head>
+<body>
+  <header>
+    <h1>Whiteout</h1>
+    <p class="subtitle">Anonymisation locale de documents</p>
+    <button id="settings-btn" class="icon-btn" title="Paramètres">&#9881;</button>
+  </header>
+
+  <!-- Settings panel (hidden by default) -->
+  <div id="settings-panel" class="panel" hidden>
+    <h2>Paramètres</h2>
+    <label>
+      Serveur Touchstone
+      <input type="url" id="touchstone-url" value="http://localhost:8420" />
+    </label>
+    <label>
+      Ratio de leurres
+      <input type="range" id="decoy-ratio" min="0" max="50" value="35" />
+      <span id="decoy-ratio-val">35%</span>
+    </label>
+    <label>
+      Style d'alias
+      <select id="alias-style">
+        <option value="realistic" selected>Réaliste</option>
+        <option value="generic">Générique</option>
+      </select>
+    </label>
+    <button id="settings-close" class="btn btn-sm">Fermer</button>
+  </div>
+
+  <main>
+    <!-- Panel 1: Input -->
+    <section id="input-panel" class="panel">
+      <h2>Texte source</h2>
+      <textarea
+        id="input-text"
+        placeholder="Collez votre texte ici..."
+        rows="10"
+      ></textarea>
+      <div class="actions">
+        <button id="process-btn" class="btn btn-primary">Anonymiser</button>
+        <span id="language-indicator" class="badge"></span>
+      </div>
+    </section>
+
+    <!-- Panel 2: Review -->
+    <section id="review-panel" class="panel" hidden>
+      <h2>Vérification</h2>
+      <div class="review-toolbar">
+        <button id="accept-all" class="btn btn-sm">Tout accepter</button>
+        <button id="skip-unconfirmed" class="btn btn-sm">Ignorer les non-confirmés</button>
+        <span id="entity-counter" class="badge"></span>
+      </div>
+      <div id="review-text" class="review-text"></div>
+      <div class="actions">
+        <button id="generate-btn" class="btn btn-primary">Générer le texte anonymisé</button>
+      </div>
+    </section>
+
+    <!-- Panel 3: Output -->
+    <section id="output-panel" class="panel" hidden>
+      <h2>Résultat</h2>
+      <textarea id="output-text" readonly rows="10"></textarea>
+      <div class="actions">
+        <button id="copy-btn" class="btn">Copier</button>
+        <button id="download-btn" class="btn">Télécharger (.txt)</button>
+        <button id="download-csv-btn" class="btn">Table d'alias (.csv)</button>
+        <button id="new-doc-btn" class="btn btn-primary">Nouveau document</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Whiteout v0.1.0 — Vos données restent sur votre appareil</span>
+  </footer>
+
+  <script type="module" src="./popup.ts"></script>
+</body>
+</html>

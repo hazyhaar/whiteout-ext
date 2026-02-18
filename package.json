@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "workspaces": ["packages/core", "packages/chrome", "packages/proto"],
+  "scripts": {
+    "build": "npm run -w packages/core build && npm run -w packages/chrome build",
+    "build:chrome": "npm run -w packages/chrome build",
+    "build:android": "npm run -w packages/core bundle:iife && node scripts/copy-core-android.js",
+    "build:apple": "npm run -w packages/core bundle:iife && node scripts/copy-core-apple.js",
+    "bundle:iife": "npm run -w packages/core bundle:iife",
+    "test": "npm run -w packages/core test",
+    "typecheck": "npm run -w packages/core typecheck"
+  }
+}

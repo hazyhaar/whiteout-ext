@@ -1,0 +1,22 @@
+{
+  "fr": {
+    "forms": ["SCI", "SARL", "SAS", "SA", "EURL", "SASU", "GIE", "SNC", "SCA", "SCOP", "SCEA", "SEL", "SELARL", "SELAS"],
+    "context_words": ["SOCIETE", "SOCIÉTÉ", "GROUPE", "COMPAGNIE", "ETABLISSEMENT", "ÉTABLISSEMENT", "FONDATION", "ASSOCIATION"]
+  },
+  "uk": {
+    "forms": ["LTD", "LIMITED", "PLC", "LLP", "CIC", "CIO", "LP"],
+    "context_words": ["COMPANY", "GROUP", "HOLDINGS", "PARTNERS", "ASSOCIATES", "FOUNDATION", "TRUST"]
+  },
+  "de": {
+    "forms": ["GMBH", "AG", "KG", "OHG", "EV", "E.V.", "UG", "GMBH & CO. KG", "GMBH & CO KG", "SE"],
+    "context_words": ["GESELLSCHAFT", "VEREIN", "STIFTUNG", "GENOSSENSCHAFT", "KONZERN"]
+  },
+  "us": {
+    "forms": ["LLC", "INC", "INC.", "INCORPORATED", "CORP", "CORP.", "CORPORATION", "LP", "LLP", "PLLC", "PA", "PC"],
+    "context_words": ["COMPANY", "GROUP", "HOLDINGS", "PARTNERS", "ASSOCIATES", "FOUNDATION"]
+  },
+  "br": {
+    "forms": ["LTDA", "S.A.", "SA", "EIRELI", "MEI", "EPP", "ME"],
+    "context_words": ["EMPRESA", "GRUPO", "COMPANHIA", "FUNDAÇÃO", "ASSOCIAÇÃO"]
+  }
+}

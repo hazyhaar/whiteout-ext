@@ -1,0 +1,109 @@
+// Touchstone Classification Service — ConnectRPC interface
+//
+// This proto defines the contract between Whiteout clients (Chrome, Android,
+// iOS, desktop) and the Touchstone classification server.
+//
+// Touchstone runs on the HOROS chassis (hazyhaar/pkg/chassis) and serves this
+// interface over both HTTP/2 (Connect protocol) and MCP-over-QUIC.
+//
+// Code generation targets:
+//   TypeScript: @connectrpc/protoc-gen-connect-es
+//   Go:         connectrpc/connect-go (already in hazyhaar/pkg/kit)
+//   Kotlin:     com.squareup.wire or connectrpc/connect-kotlin
+//   Swift:      connectrpc/connect-swift
+
+syntax = "proto3";
+
+package touchstone.v1;
+
+option go_package = "github.com/hazyhaar/pkg/touchstone/v1;touchstonev1";
+
+// ClassificationService provides dictionary-based entity classification.
+// It does NOT receive full documents — only isolated terms mixed with decoys.
+service ClassificationService {
+  // Classify a batch of terms against registered dictionaries.
+  rpc ClassifyBatch(ClassifyBatchRequest) returns (ClassifyBatchResponse);
+
+  // Classify a single term. Prefer ClassifyBatch for efficiency.
+  rpc Classify(ClassifyRequest) returns (ClassifyResponse);
+
+  // List available dictionaries and their jurisdictions.
+  rpc ListDictionaries(ListDictionariesRequest) returns (ListDictionariesResponse);
+
+  // Health check.
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+message ClassifyBatchRequest {
+  // Terms to classify. May include decoys — the server cannot distinguish them.
+  repeated string terms = 1;
+
+  // Jurisdictions to search (e.g. ["fr", "uk"]). Empty = all available.
+  repeated string jurisdictions = 2;
+
+  // Client-generated request ID for idempotency and tracing.
+  string request_id = 3;
+}
+
+message ClassifyBatchResponse {
+  // Map of term → list of classification results.
+  map<string, ClassificationResults> classifications = 1;
+
+  // Echo back the client request ID.
+  string request_id = 2;
+}
+
+message ClassificationResults {
+  repeated ClassificationResult results = 1;
+}
+
+message ClassificationResult {
+  // Dictionary that matched (e.g. "fr_surnames", "uk_cities").
+  string dict = 1;
+
+  // Whether the term matched this dictionary.
+  bool match = 2;
+
+  // Entity type (e.g. "surname", "first_name", "city", "company").
+  string type = 3;
+
+  // Jurisdiction of the matching dictionary (e.g. "fr", "uk", "de").
+  string jurisdiction = 4;
+
+  // Confidence level ("high", "medium", "low").
+  string confidence = 5;
+
+  // Additional metadata from the dictionary entry.
+  map<string, string> metadata = 6;
+}
+
+message ClassifyRequest {
+  string term = 1;
+  repeated string jurisdictions = 2;
+  string request_id = 3;
+}
+
+message ClassifyResponse {
+  repeated ClassificationResult results = 1;
+}
+
+message ListDictionariesRequest {}
+
+message ListDictionariesResponse {
+  repeated DictionaryInfo dictionaries = 1;
+}
+
+message DictionaryInfo {
+  string name = 1;
+  string jurisdiction = 2;
+  string type = 3;
+  int64 entry_count = 4;
+  string updated_at = 5;
+}
+
+message PingRequest {}
+
+message PingResponse {
+  string status = 1;
+  string version = 2;
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@whiteout/proto",
+  "version": "0.1.0",
+  "description": "ConnectRPC service definitions for the Touchstone classification API. Shared between all Whiteout clients and the Touchstone server.",
+  "private": true,
+  "files": ["touchstone.proto", "gen/"],
+  "scripts": {
+    "generate:ts": "npx @bufbuild/buf generate --template buf.gen.ts.yaml",
+    "generate:go": "npx @bufbuild/buf generate --template buf.gen.go.yaml"
+  }
+}
