@@ -21,6 +21,9 @@ export { classifyBatch } from "./touchstone-client.js";
 export { assemble } from "./assembler.js";
 export { generateAlias, resetAliasCounters } from "./alias-generator.js";
 export { substitute } from "./substituter.js";
+export { anonymize, anonymizeBatch, deanonymize } from "./anonymize.js";
+export type { AnonymizeOptions, AnonymizeResult } from "./anonymize.js";
+export { NodeFetch } from "./node-fetch.js";
 
 import { tokenize } from "./tokenizer.js";
 import { detectLocal, detectLanguage } from "./local-detector.js";

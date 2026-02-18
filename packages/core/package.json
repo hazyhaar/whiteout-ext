@@ -4,10 +4,17 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "whiteout": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./anonymize": {
+      "import": "./dist/anonymize.js",
+      "types": "./dist/anonymize.d.ts"
     }
   },
   "scripts": {
