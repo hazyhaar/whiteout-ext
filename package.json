@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "workspaces": ["packages/core", "packages/chrome"],
+  "scripts": {
+    "build": "npm run -w packages/core build && npm run -w packages/chrome build",
+    "build:chrome": "npm run -w packages/chrome build",
+    "test": "npm run -w packages/core test",
+    "typecheck": "npm run -w packages/core typecheck"
+  }
+}

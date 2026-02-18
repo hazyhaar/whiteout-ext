@@ -1,0 +1,5 @@
+{
+  "prefixes": ["Euro", "Groupe", "Alliance", "Horizon", "Apex", "Nova", "Stellar", "Atlas", "Global", "Prime", "Néo", "Vital", "Optima", "Synergis", "Vertex"],
+  "suffixes": ["Solutions", "Services", "Conseil", "Investissement", "Développement", "Capital", "Industries", "Technologies", "Patrimoine", "Gestion", "Partners", "Consulting", "Management", "Finance", "Immobilier"],
+  "standalone": ["Horizon", "Étoile", "Méridien", "Solaris", "Boréal", "Azur", "Opale", "Cristal", "Zénith", "Aurore", "Belvédère", "Rivage", "Altitude", "Latitude", "Équinoxe"]
+}
