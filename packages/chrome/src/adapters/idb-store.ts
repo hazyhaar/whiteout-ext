@@ -26,6 +26,29 @@ export class IDBStore implements StorePort {
 
   constructor() {
     this.dbPromise = openDB();
+    // Schedule expired cache cleanup on startup (non-blocking)
+    this.cleanExpiredCache().catch(() => {});
+  }
+
+  /** Remove expired entries from the classification cache. */
+  async cleanExpiredCache(): Promise<void> {
+    const db = await this.dbPromise;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("cache", "readwrite");
+      const store = tx.objectStore("cache");
+      const idx = store.index("expiresAt");
+      const range = IDBKeyRange.upperBound(Date.now());
+      const req = idx.openCursor(range);
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        }
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
   }
 
   async getAliasMap(sessionId: string): Promise<Map<string, string>> {

@@ -103,3 +103,52 @@ describe("deanonymize", () => {
     expect(restored).toBe("Jean Dupont habite à Lyon.");
   });
 });
+
+describe("roundtrip anonymize → deanonymize", () => {
+  it("roundtrips for pattern entities (email, phone)", async () => {
+    const original = "Contacter jean.dupont@gmail.com ou appeler 06 12 34 56 78.";
+    const result = await anonymize(original, { touchstoneUrl: null });
+
+    // Anonymized text should not contain originals
+    expect(result.text).not.toContain("jean.dupont@gmail.com");
+    expect(result.text).not.toContain("06 12 34 56 78");
+
+    // Deanonymize should restore them
+    const restored = deanonymize(result.text, result.aliasTable);
+    expect(restored).toContain("jean.dupont@gmail.com");
+    expect(restored).toContain("06 12 34 56 78");
+  });
+
+  it("handles URL anonymization roundtrip", async () => {
+    const original = "Voir https://example.com/page?q=test pour plus d'info.";
+    const result = await anonymize(original, { touchstoneUrl: null });
+
+    expect(result.text).not.toContain("https://example.com/page?q=test");
+    const restored = deanonymize(result.text, result.aliasTable);
+    expect(restored).toContain("https://example.com/page?q=test");
+  });
+});
+
+describe("edge cases", () => {
+  it("handles empty text", async () => {
+    const result = await anonymize("", { touchstoneUrl: null });
+    expect(result.text).toBe("");
+    expect(result.entities).toHaveLength(0);
+  });
+
+  it("handles text with only stop words", async () => {
+    const result = await anonymize("le de la du des un une", { touchstoneUrl: null });
+    expect(result.entities).toHaveLength(0);
+    expect(result.text).toBe("le de la du des un une");
+  });
+
+  it("handles mixed FR/EN text", async () => {
+    const result = await anonymize(
+      "M. Dupont contacted Mr. Smith in Paris for the meeting.",
+      { touchstoneUrl: null }
+    );
+    // Should detect entities from both languages
+    expect(result.entities.length).toBeGreaterThan(0);
+    expect(result.text).not.toContain("Dupont");
+  });
+});

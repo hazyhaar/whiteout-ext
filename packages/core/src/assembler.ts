@@ -15,7 +15,8 @@ export function assemble(
   groups: DetectedGroup[],
   touchstoneResults: Map<string, TouchstoneResult[]>,
   aliasMap: Map<string, string>,
-  aliasStyle: "realistic" | "generic" = "realistic"
+  aliasStyle: "realistic" | "generic" = "realistic",
+  originalText?: string
 ): Entity[] {
   const entities: Entity[] = [];
 
@@ -25,7 +26,7 @@ export function assemble(
   }
 
   // Merge adjacent person entities (firstname + surname)
-  const merged = mergeAdjacentPersons(entities, aliasMap, aliasStyle);
+  const merged = mergeAdjacentPersons(entities, aliasMap, aliasStyle, originalText);
 
   return merged;
 }
@@ -153,17 +154,21 @@ function mapLocalTypeToEntityType(
     case "ssn":
       return "ssn";
     case "url":
-      return "unknown";
+      return "url";
     default:
       return "unknown";
   }
 }
 
-/** Merge adjacent person entities into single entities. */
+/**
+ * Merge adjacent person entities into single entities.
+ * Needs access to the original text to preserve interstitial whitespace/hyphens.
+ */
 function mergeAdjacentPersons(
   entities: Entity[],
   aliasMap: Map<string, string>,
-  aliasStyle: "realistic" | "generic"
+  aliasStyle: "realistic" | "generic",
+  originalText?: string
 ): Entity[] {
   if (entities.length < 2) return entities;
 
@@ -182,7 +187,11 @@ function mergeAdjacentPersons(
       const next = sorted[i + 1];
       // Check if they're adjacent (within a few chars, typically whitespace)
       if (next.start - current.end <= 3) {
-        const mergedText = `${current.text} ${next.text}`;
+        // Use original text between the two entities to preserve whitespace/hyphens
+        const interstitial = originalText
+          ? originalText.slice(current.end, next.start)
+          : " ";
+        const mergedText = `${current.text}${interstitial}${next.text}`;
         const alias = generateAlias("person", mergedText, aliasMap, aliasStyle);
         merged.push({
           text: mergedText,

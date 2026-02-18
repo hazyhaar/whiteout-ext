@@ -158,7 +158,9 @@ export async function fingerprint(text: string): Promise<string> {
  */
 export function generateId(prefix: string): string {
   const ts = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 8);
+  const buf = new Uint8Array(4);
+  crypto.getRandomValues(buf);
+  const rand = Array.from(buf).map(b => b.toString(36)).join("").slice(0, 8);
   return `${prefix}${ts}${rand}`;
 }
 

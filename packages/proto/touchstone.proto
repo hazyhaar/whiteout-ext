@@ -40,11 +40,17 @@ message ClassifyBatchRequest {
 
   // Jurisdictions to search (e.g. ["fr", "uk"]). Empty = all available.
   repeated string jurisdictions = 2;
+
+  // Client-generated request ID for idempotency and tracing.
+  string request_id = 3;
 }
 
 message ClassifyBatchResponse {
   // Map of term → list of classification results.
   map<string, ClassificationResults> classifications = 1;
+
+  // Echo back the client request ID.
+  string request_id = 2;
 }
 
 message ClassificationResults {
@@ -74,6 +80,7 @@ message ClassificationResult {
 message ClassifyRequest {
   string term = 1;
   repeated string jurisdictions = 2;
+  string request_id = 3;
 }
 
 message ClassifyResponse {

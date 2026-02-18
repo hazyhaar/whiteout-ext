@@ -4,3 +4,7 @@ plugins:
     out: gen/go
   - remote: buf.build/connectrpc/go
     out: gen/go
+  - remote: buf.build/community/planetscale-vtprotobuf
+    out: gen/go
+    opt:
+      - features=marshal+unmarshal+size+pool

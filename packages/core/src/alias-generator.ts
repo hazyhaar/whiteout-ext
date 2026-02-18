@@ -10,6 +10,7 @@ let genericCounters: Record<string, number> = {
   city: 0,
   email: 0,
   phone: 0,
+  url: 0,
 };
 
 /** Reset counters for a new document session. */
@@ -62,6 +63,7 @@ function generateGenericAlias(type: EntityType): string {
   if (type === "phone") return `+33 X XX XX XX X${n}`;
   if (type === "iban") return `FRXX XXXX XXXX XXXX XXXX XXX${n}`;
   if (type === "ssn") return `X XX XX XX XXX XXX X${n}`;
+  if (type === "url") return `https://exemple.fr/page${n}`;
   return `${label} ${n}`;
 }
 
@@ -83,6 +85,8 @@ function generateRealisticAlias(type: EntityType, original: string): string {
       return maskWithX(original);
     case "ssn":
       return maskWithX(original);
+    case "url":
+      return generateUrlAlias(original);
     default:
       return `[${original.substring(0, 3)}...]`;
   }
@@ -112,7 +116,7 @@ function generateCompanyAlias(original: string): string {
 }
 
 function generateAddressAlias(original: string): string {
-  const num = Math.floor(Math.random() * 150) + 1;
+  const num = cryptoRandomInt(150) + 1;
   const streets = ["rue", "avenue", "boulevard", "place", "chemin"];
   const names = [
     "des Tilleuls", "du Commerce", "Victor Hugo", "de la Paix",
@@ -132,14 +136,21 @@ function generateEmailAlias(): string {
 function generatePhoneAlias(original: string): string {
   // Keep same format, randomize digits
   if (/^\+33/.test(original) || /^0[1-9]/.test(original)) {
-    const d = () => String(Math.floor(Math.random() * 90) + 10);
+    const d = () => String(cryptoRandomInt(90) + 10);
     return `+33 6 ${d()} ${d()} ${d()} ${d()}`;
   }
   if (/^\+44/.test(original)) {
-    const d = () => String(Math.floor(Math.random() * 900) + 100);
+    const d = () => String(cryptoRandomInt(900) + 100);
     return `+44 ${d()} ${d()} ${d()}`;
   }
-  return original.replace(/\d/g, () => String(Math.floor(Math.random() * 10)));
+  return original.replace(/\d/g, () => String(cryptoRandomInt(10)));
+}
+
+function generateUrlAlias(original: string): string {
+  const domains = ["exemple.fr", "site-web.com", "page.org", "portail.net"];
+  const paths = ["page", "doc", "info", "contenu", "ressource"];
+  const protocol = original.startsWith("https") ? "https" : "http";
+  return `${protocol}://${pickRandom(domains)}/${pickRandom(paths)}`;
 }
 
 function maskWithX(text: string): string {
@@ -156,6 +167,13 @@ const CITY_POOL = [
   "Munich", "Hamburg", "Cologne", "Frankfurt", "Stuttgart",
 ];
 
+/** Crypto-safe random integer in [0, max). */
+function cryptoRandomInt(max: number): number {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] % max;
+}
+
 function pickRandom<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+  return arr[cryptoRandomInt(arr.length)];
 }

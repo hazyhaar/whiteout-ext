@@ -133,7 +133,9 @@ export function detectLocal(tokens: Token[]): DetectedGroup[] {
     if (consumed.has(i)) continue;
 
     if (LEGAL_FORMS.has(t.text.toUpperCase())) {
-      // Collect legal form + following capitalized words
+      // Collect legal form + following words.
+      // Company names often contain articles like "Les", "Des", "Du"
+      // (e.g. "SCI Les Lilas"), so we allow capitalized stop words here.
       const groupTokens = [t];
       consumed.add(i);
 
@@ -141,7 +143,6 @@ export function detectLocal(tokens: Token[]): DetectedGroup[] {
         const next = wordIndices[wj];
         if (consumed.has(next.i)) break;
         if (!isCapitalized(next.t.text)) break;
-        if (isStopWord(next.t.text) && !isCapitalized(next.t.text)) break;
         groupTokens.push(next.t);
         consumed.add(next.i);
       }
@@ -169,14 +170,7 @@ export function detectLocal(tokens: Token[]): DetectedGroup[] {
     if (STREET_TYPES.has(t.text.toUpperCase())) {
       const groupTokens: Token[] = [];
 
-      // Look back for a number token
-      if (wi > 0) {
-        const prev = wordIndices[wi - 1];
-        if (!consumed.has(prev.i) && prev.t.kind === "number") {
-          // Actually check in the full tokens array
-        }
-      }
-      // Check token just before in the full array for a number
+      // Look back in the full token array for a street number
       for (let j = i - 1; j >= 0; j--) {
         const prev = tokens[j];
         if (prev.kind === "whitespace") continue;

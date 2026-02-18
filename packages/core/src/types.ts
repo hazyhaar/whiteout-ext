@@ -59,6 +59,7 @@ export type EntityType =
   | "phone"
   | "iban"
   | "ssn"
+  | "url"
   | "unknown";
 
 /** Configuration for the Touchstone client. */

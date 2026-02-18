@@ -39,11 +39,19 @@ describe("tokenize", () => {
     expect(patterns[0].patternType).toBe("phone");
   });
 
-  it("detects IBAN", () => {
-    const tokens = tokenize("IBAN: FR76 1234 5678 9012 3456 7890 123");
+  it("detects IBAN with valid checksum", () => {
+    // FR7630006000011234567890189 is a valid test IBAN (mod-97 = 1)
+    const tokens = tokenize("IBAN: FR76 3000 6000 0112 3456 7890 189");
     const patterns = tokens.filter((t) => t.kind === "pattern");
     expect(patterns).toHaveLength(1);
     expect(patterns[0].patternType).toBe("iban");
+  });
+
+  it("rejects IBAN with invalid checksum", () => {
+    // FR00 is invalid check digits
+    const tokens = tokenize("IBAN: FR00 1234 5678 9012 3456 7890 123");
+    const patterns = tokens.filter((t) => t.kind === "pattern");
+    expect(patterns).toHaveLength(0);
   });
 
   it("detects French SSN (NIR)", () => {
@@ -86,5 +94,23 @@ describe("tokenize", () => {
 
   it("returns empty array for empty string", () => {
     expect(tokenize("")).toEqual([]);
+  });
+
+  it("handles whitespace-only input", () => {
+    const tokens = tokenize("   \n\t  ");
+    expect(tokens.every((t) => t.kind === "whitespace")).toBe(true);
+  });
+
+  it("handles numbers-only input", () => {
+    const tokens = tokenize("42 3.14 1,000");
+    const nums = tokens.filter((t) => t.kind === "number");
+    expect(nums.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("handles accented characters in words", () => {
+    const tokens = tokenize("l'école élémentaire de Zürich");
+    const words = tokens.filter((t) => t.kind === "word");
+    expect(words.some((t) => t.text === "élémentaire")).toBe(true);
+    expect(words.some((t) => t.text === "Zürich")).toBe(true);
   });
 });

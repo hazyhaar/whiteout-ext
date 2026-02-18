@@ -11,6 +11,9 @@ const ALL_FIRSTNAMES = [
 /**
  * Mix real candidate terms with decoy terms and shuffle.
  * Returns a shuffled array. The caller must track which terms are real.
+ *
+ * Decoy count is computed so that real + decoys ≤ maxBatch.
+ * Real terms are NEVER dropped — only the decoy count is reduced.
  */
 export function mixDecoys(
   realTerms: string[],
@@ -18,7 +21,11 @@ export function mixDecoys(
   maxBatch: number = 100
 ): { mixed: string[]; realSet: Set<string> } {
   const realSet = new Set(realTerms);
-  const decoyCount = Math.ceil(realTerms.length * ratio);
+
+  // Ensure we never exceed maxBatch, and never drop real terms
+  const availableForDecoys = Math.max(0, maxBatch - realTerms.length);
+  const desiredDecoys = Math.ceil(realTerms.length * ratio);
+  const decoyCount = Math.min(desiredDecoys, availableForDecoys);
   const decoys: string[] = [];
 
   for (let i = 0; i < decoyCount; i++) {
@@ -28,35 +35,38 @@ export function mixDecoys(
   const mixed = [...realTerms, ...decoys];
   fisherYatesShuffle(mixed);
 
-  // Cap at max batch size
-  if (mixed.length > maxBatch) {
-    mixed.length = maxBatch;
-  }
-
   return { mixed, realSet };
 }
 
 function generateDecoy(): string {
-  const roll = Math.random();
+  const roll = cryptoRandom();
   if (roll < 0.4) {
-    // Random name
     return pickRandom(ALL_FIRSTNAMES);
   } else if (roll < 0.7) {
-    // Random surname
     return pickRandom(surnames);
   } else {
-    // Random company fragment
     return pickRandom(companies.standalone);
   }
 }
 
+/** Crypto-safe random float in [0, 1). */
+function cryptoRandom(): number {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] / (0xffffffff + 1);
+}
+
 function pickRandom<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return arr[buf[0] % arr.length];
 }
 
 function fisherYatesShuffle<T>(arr: T[]): void {
+  const buf = new Uint32Array(arr.length);
+  crypto.getRandomValues(buf);
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = buf[i] % (i + 1);
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
 }

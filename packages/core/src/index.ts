@@ -46,7 +46,6 @@ import { tokenize } from "./tokenizer.js";
 import { detectLocal, detectLanguage } from "./local-detector.js";
 import { classifyBatch } from "./touchstone-client.js";
 import { assemble } from "./assembler.js";
-import { resetAliasCounters } from "./alias-generator.js";
 import { substitute } from "./substituter.js";
 import type { PipelineResult, PipelineOptions } from "./types.js";
 import type { FetchPort, StorePort } from "./ports.js";
@@ -64,9 +63,6 @@ export async function pipeline(
   sessionId: string,
   options: PipelineOptions = {}
 ): Promise<PipelineResult> {
-  // Reset alias counters for generic style
-  resetAliasCounters();
-
   // Load existing alias map for session consistency
   const aliasMap = await store.getAliasMap(sessionId);
 
@@ -96,7 +92,8 @@ export async function pipeline(
     groups,
     touchstoneResults,
     aliasMap,
-    options.aliasStyle ?? "realistic"
+    options.aliasStyle ?? "realistic",
+    text
   );
 
   // Step 6: Persist alias map

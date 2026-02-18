@@ -38,4 +38,20 @@ describe("mixDecoys", () => {
     const { mixed } = mixDecoys([], 0.3);
     expect(mixed).toEqual([]);
   });
+
+  it("never drops real terms when batch is full", () => {
+    // 90 real terms + 35% decoys = 122 > maxBatch=100
+    // Decoy count should be reduced, not real terms dropped
+    const real = Array.from({ length: 90 }, (_, i) => `RealTerm${i}`);
+    const { mixed, realSet } = mixDecoys(real, 0.35, 100);
+
+    // All 90 real terms must be present
+    for (const term of real) {
+      expect(mixed).toContain(term);
+    }
+    expect(mixed.length).toBeLessThanOrEqual(100);
+    // Decoys fill remaining space: 100 - 90 = 10
+    const decoyCount = mixed.filter((t) => !realSet.has(t)).length;
+    expect(decoyCount).toBeLessThanOrEqual(10);
+  });
 });

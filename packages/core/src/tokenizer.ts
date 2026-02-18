@@ -52,6 +52,10 @@ export function tokenize(text: string): Token[] {
         (s) => start < s.end && end > s.start
       );
       if (!overlaps) {
+        // Validate IBAN checksums (ISO 13616 mod-97)
+        if (pat.type === "iban" && !validateIbanChecksum(m[0])) {
+          continue;
+        }
         patternSpans.push({ start, end, type: pat.type });
       }
     }
@@ -82,6 +86,34 @@ export function tokenize(text: string): Token[] {
   }
 
   return tokens;
+}
+
+/**
+ * Validate IBAN checksum using ISO 13616 mod-97.
+ * Moves country code + check digits to the end, converts letters to numbers,
+ * then verifies remainder when divided by 97 is 1.
+ */
+function validateIbanChecksum(iban: string): boolean {
+  const cleaned = iban.replace(/\s/g, "").toUpperCase();
+  if (cleaned.length < 5) return false;
+  // Move first 4 chars (country + check digits) to end
+  const rearranged = cleaned.slice(4) + cleaned.slice(0, 4);
+  // Convert letters to numbers (A=10, B=11, ..., Z=35)
+  let numStr = "";
+  for (const ch of rearranged) {
+    const code = ch.charCodeAt(0);
+    if (code >= 65 && code <= 90) {
+      numStr += (code - 55).toString();
+    } else {
+      numStr += ch;
+    }
+  }
+  // Compute mod 97 using chunked arithmetic (avoid BigInt for compatibility)
+  let remainder = 0;
+  for (let i = 0; i < numStr.length; i++) {
+    remainder = (remainder * 10 + parseInt(numStr[i], 10)) % 97;
+  }
+  return remainder === 1;
 }
 
 /** Split a non-pattern segment into word/number/punctuation/whitespace tokens. */

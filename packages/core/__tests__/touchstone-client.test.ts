@@ -14,7 +14,7 @@ function makeGroup(text: string, skip = false): DetectedGroup {
 }
 
 describe("classifyBatch", () => {
-  it("sends ConnectRPC request first", async () => {
+  it("sends ConnectRPC request first (nested proto format)", async () => {
     const fetch: FetchPort = {
       async post(url, body) {
         expect(url).toContain("/touchstone.v1.ClassificationService/ClassifyBatch");
@@ -23,7 +23,8 @@ describe("classifyBatch", () => {
           status: 200,
           body: JSON.stringify({
             classifications: {
-              [req.terms[0]]: [{ dict: "test", match: true, type: "surname", jurisdiction: "fr", confidence: "high", metadata: {} }],
+              // Proto wire format: ClassificationResults { results: [...] }
+              [req.terms[0]]: { results: [{ dict: "test", match: true, type: "surname", jurisdiction: "fr", confidence: "high", metadata: {} }] },
             },
           }),
         };
@@ -35,6 +36,28 @@ describe("classifyBatch", () => {
     const results = await classifyBatch(groups, fetch, store, {}, 0);
 
     expect(results.has("Dupont")).toBe(true);
+    expect(results.get("Dupont")![0].type).toBe("surname");
+  });
+
+  it("handles flat REST response format", async () => {
+    const fetch: FetchPort = {
+      async post(url, body) {
+        if (url.includes("ClassifyBatch")) {
+          return { status: 404, body: "Not Found" };
+        }
+        return {
+          status: 200,
+          body: JSON.stringify({
+            classifications: {
+              Dupont: [{ dict: "surnames", match: true, type: "surname", jurisdiction: "fr", confidence: "high", metadata: {} }],
+            },
+          }),
+        };
+      },
+    };
+
+    const store = new MemoryStore();
+    const results = await classifyBatch([makeGroup("Dupont")], fetch, store, {}, 0);
     expect(results.get("Dupont")![0].type).toBe("surname");
   });
 
