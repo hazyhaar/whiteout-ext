@@ -2,6 +2,10 @@
   "name": "@whiteout/core",
   "version": "0.1.0",
   "type": "module",
+  "files": [
+    "dist",
+    "data"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {

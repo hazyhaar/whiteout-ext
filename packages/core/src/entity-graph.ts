@@ -158,10 +158,12 @@ export async function fingerprint(text: string): Promise<string> {
  */
 export function generateId(prefix: string): string {
   const ts = Date.now().toString(36);
-  const buf = new Uint8Array(4);
+  const buf = new Uint8Array(8);
   crypto.getRandomValues(buf);
-  const rand = Array.from(buf).map(b => b.toString(36)).join("").slice(0, 8);
-  return `${prefix}${ts}${rand}`;
+  const rand = Array.from(buf)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `${prefix}${ts}_${rand}`;
 }
 
 /**
@@ -173,87 +175,143 @@ export async function findMatches(
   graph: EntityGraphPort
 ): Promise<Map<string, EntityMatch>> {
   const matches = new Map<string, EntityMatch>();
+  if (detectedEntities.length === 0) return matches;
 
-  for (const detected of detectedEntities) {
-    const canonical = canonicalize(detected.text);
-    const known = await graph.findByCanonical(canonical);
+  // Pre-compute canonical texts for co-occurrence check
+  const currentTexts = new Set(
+    detectedEntities.map((e) => canonicalize(e.text))
+  );
 
+  // Phase 1: Fetch all known entities in parallel
+  const canonicals = detectedEntities.map((e) => canonicalize(e.text));
+  const knownResults = await Promise.all(
+    canonicals.map((c) => graph.findByCanonical(c))
+  );
+
+  // Phase 2: Determine which entities need occurrence lookups
+  type Candidate = {
+    detected: { text: string; type: EntityType };
+    canonical: string;
+    entity: KnownEntity;
+    isFallback: boolean;
+  };
+
+  const candidates: Candidate[] = [];
+  for (let i = 0; i < detectedEntities.length; i++) {
+    const known = knownResults[i];
     if (known.length === 0) continue;
 
-    // Best match: same type, most recent
+    const detected = detectedEntities[i];
     const best = known
       .filter((k) => k.type === detected.type)
       .sort((a, b) => b.lastSeen.localeCompare(a.lastSeen))[0];
 
-    if (!best) {
-      // Type mismatch — possible match only
-      const fallback = known[0];
-      const occurrences = await graph.getOccurrences(fallback.id);
+    if (best) {
+      candidates.push({
+        detected,
+        canonical: canonicals[i],
+        entity: best,
+        isFallback: false,
+      });
+    } else {
+      candidates.push({
+        detected,
+        canonical: canonicals[i],
+        entity: known[0],
+        isFallback: true,
+      });
+    }
+  }
+
+  if (candidates.length === 0) return matches;
+
+  // Phase 3: Fetch occurrences in parallel
+  const occurrenceResults = await Promise.all(
+    candidates.map((c) => graph.getOccurrences(c.entity.id))
+  );
+
+  // Phase 4: Fetch documents and co-occurrences in parallel
+  // Cache document lookups to avoid fetching the same doc multiple times
+  const docCache = new Map<string, Promise<DocumentRecord | null>>();
+  const coOccCache = new Map<string, Promise<EntityOccurrence[]>>();
+
+  function getCachedDoc(docId: string) {
+    let p = docCache.get(docId);
+    if (!p) {
+      p = graph.getDocument(docId);
+      docCache.set(docId, p);
+    }
+    return p;
+  }
+  function getCachedCoOcc(docId: string) {
+    let p = coOccCache.get(docId);
+    if (!p) {
+      p = graph.getDocumentOccurrences(docId);
+      coOccCache.set(docId, p);
+    }
+    return p;
+  }
+
+  // Build match results in parallel
+  await Promise.all(
+    candidates.map(async (candidate, i) => {
+      const occurrences = occurrenceResults[i];
       const lastOcc = occurrences.sort((a, b) =>
         b.documentId.localeCompare(a.documentId)
       )[0];
-      if (lastOcc) {
-        const prevDoc = await graph.getDocument(lastOcc.documentId);
-        if (prevDoc) {
-          const coOccurrences = await graph.getDocumentOccurrences(lastOcc.documentId);
-          matches.set(detected.text, {
-            knownEntity: fallback,
-            matchConfidence: "possible",
-            previousAlias: lastOcc.alias,
-            previousDocument: prevDoc,
-            coEntities: coOccurrences
-              .filter((o) => o.entityId !== fallback.id)
-              .map((o) => o.originalText)
-              .slice(0, 5),
-          });
-        }
+
+      if (!lastOcc) return;
+
+      const [prevDoc, coOccurrences] = await Promise.all([
+        getCachedDoc(lastOcc.documentId),
+        getCachedCoOcc(lastOcc.documentId),
+      ]);
+
+      if (!prevDoc) return;
+
+      if (candidate.isFallback) {
+        matches.set(candidate.detected.text, {
+          knownEntity: candidate.entity,
+          matchConfidence: "possible",
+          previousAlias: lastOcc.alias,
+          previousDocument: prevDoc,
+          coEntities: coOccurrences
+            .filter((o) => o.entityId !== candidate.entity.id)
+            .map((o) => o.originalText)
+            .slice(0, 5),
+        });
+        return;
       }
-      continue;
-    }
 
-    // Same type match
-    const occurrences = await graph.getOccurrences(best.id);
-    const lastOcc = occurrences.sort((a, b) =>
-      b.documentId.localeCompare(a.documentId)
-    )[0];
+      const coEntityTexts = coOccurrences
+        .filter((o) => o.entityId !== candidate.entity.id)
+        .map((o) => o.originalText);
 
-    if (!lastOcc) continue;
+      const coOverlap = coEntityTexts.filter((t) =>
+        currentTexts.has(canonicalize(t))
+      );
 
-    const prevDoc = await graph.getDocument(lastOcc.documentId);
-    if (!prevDoc) continue;
+      let confidence: EntityMatch["matchConfidence"];
+      if (
+        candidate.entity.canonical === candidate.canonical &&
+        coOverlap.length >= 1
+      ) {
+        confidence = "exact";
+      } else if (candidate.entity.canonical === candidate.canonical) {
+        confidence = "likely";
+      } else {
+        confidence = "possible";
+      }
 
-    // Check co-occurrence for confidence
-    const coOccurrences = await graph.getDocumentOccurrences(lastOcc.documentId);
-    const coEntityTexts = coOccurrences
-      .filter((o) => o.entityId !== best.id)
-      .map((o) => o.originalText);
-
-    // If other entities from the same previous document also appear
-    // in the current document → likely the same entity
-    const currentTexts = new Set(
-      detectedEntities.map((e) => canonicalize(e.text))
-    );
-    const coOverlap = coEntityTexts.filter((t) =>
-      currentTexts.has(canonicalize(t))
-    );
-
-    let confidence: EntityMatch["matchConfidence"];
-    if (best.canonical === canonical && coOverlap.length >= 1) {
-      confidence = "exact";
-    } else if (best.canonical === canonical) {
-      confidence = "likely";
-    } else {
-      confidence = "possible";
-    }
-
-    matches.set(detected.text, {
-      knownEntity: best,
-      matchConfidence: confidence,
-      previousAlias: lastOcc.alias,
-      previousDocument: prevDoc,
-      coEntities: coEntityTexts.slice(0, 5),
-    });
-  }
+      matches.set(candidate.detected.text, {
+        knownEntity: candidate.entity,
+        matchConfidence: confidence,
+        previousAlias: lastOcc.alias,
+        previousDocument: prevDoc,
+        coEntities: coEntityTexts.slice(0, 5),
+      });
+    })
+  );
 
   return matches;
 }
@@ -302,11 +360,15 @@ export async function recordDocument(
     }
 
     if (entityId) {
-      // Update existing entity
+      // Update existing entity — derive documentCount from occurrences
+      // to avoid read-modify-write race between concurrent tabs
       const known = await graph.getEntity(entityId);
       if (known) {
         known.lastSeen = now;
-        known.documentCount++;
+        const occurrences = await graph.getOccurrences(entityId);
+        const uniqueDocs = new Set(occurrences.map((o) => o.documentId));
+        uniqueDocs.add(documentId);
+        known.documentCount = uniqueDocs.size;
         await graph.putEntity(known);
       }
     } else {

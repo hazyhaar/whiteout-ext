@@ -97,8 +97,8 @@ export async function classifyBatch(
         await classifyBatchRest(mixed, realSet, fetchPort, store, cfg, results);
       }
     } catch {
-      console.warn("Touchstone unreachable, continuing in offline mode");
-      return results;
+      console.warn("Touchstone batch failed, skipping to next batch");
+      continue;
     }
   }
 
