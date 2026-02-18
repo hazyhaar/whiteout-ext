@@ -25,6 +25,23 @@ export { anonymize, anonymizeBatch, deanonymize } from "./anonymize.js";
 export type { AnonymizeOptions, AnonymizeResult } from "./anonymize.js";
 export { NodeFetch } from "./node-fetch.js";
 
+// Entity graph (persistent cross-document entity tracking)
+export type {
+  EntityGraphPort,
+  KnownEntity,
+  EntityOccurrence,
+  DocumentRecord,
+  EntityMatch,
+} from "./entity-graph.js";
+export {
+  canonicalize,
+  fingerprint,
+  generateId,
+  findMatches,
+  recordDocument,
+} from "./entity-graph.js";
+export { MemoryEntityGraph } from "./entity-graph-memory.js";
+
 import { tokenize } from "./tokenizer.js";
 import { detectLocal, detectLanguage } from "./local-detector.js";
 import { classifyBatch } from "./touchstone-client.js";
