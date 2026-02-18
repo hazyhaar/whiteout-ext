@@ -19,12 +19,15 @@
   },
   "scripts": {
     "build": "tsc",
+    "bundle:iife": "vite build --config vite.bundle.config.ts",
+    "bundle": "tsc && vite build --config vite.bundle.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "^5.7",
+    "vite": "^6.0",
     "vitest": "^3.0",
     "@connectrpc/connect": "^2.0",
     "@connectrpc/connect-web": "^2.0",
