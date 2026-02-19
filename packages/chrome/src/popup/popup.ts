@@ -1,25 +1,40 @@
+/**
+ * Whiteout Chrome Extension - Popup script.
+ *
+ * Dual mode:
+ * - Primary (default): scan the current page and open the review side panel
+ * - Secondary (context menu): if pendingText exists in storage, show the
+ *   copy-paste anonymization interface from the core pipeline
+ */
+
 import {
   pipeline,
   substitute,
+  MemoryStore,
   type Entity,
   type PipelineResult,
   type PipelineOptions,
-  MemoryStore,
 } from "@whiteout/core";
 import { IDBStore } from "../adapters/idb-store.js";
 import { BrowserFetch } from "../adapters/fetch-adapter.js";
 
-// State
-let currentResult: PipelineResult | null = null;
-let entities: Entity[] = [];
-let originalText = "";
-let sessionId = `sess_${Date.now().toString(36)}`;
+// -- Mode detection --
 
-// Adapters
 const store = typeof indexedDB !== "undefined" ? new IDBStore() : new MemoryStore();
 const fetchPort = new BrowserFetch();
 
-// DOM elements
+// -- Primary mode DOM elements --
+
+const primaryView = document.getElementById("primary-view")!;
+const btnScan = document.getElementById("btn-scan") as HTMLButtonElement;
+const btnPanel = document.getElementById("btn-panel") as HTMLButtonElement;
+const linkOptions = document.getElementById("link-options") as HTMLAnchorElement;
+const statusDot = document.getElementById("status-dot") as HTMLElement;
+const statusTextEl = document.getElementById("status-text") as HTMLElement;
+
+// -- Secondary mode DOM elements --
+
+const secondaryView = document.getElementById("secondary-view")!;
 const inputText = document.getElementById("input-text") as HTMLTextAreaElement;
 const processBtn = document.getElementById("process-btn") as HTMLButtonElement;
 const languageIndicator = document.getElementById("language-indicator")!;
@@ -33,62 +48,119 @@ const outputPanel = document.getElementById("output-panel")!;
 const outputText = document.getElementById("output-text") as HTMLTextAreaElement;
 const copyBtn = document.getElementById("copy-btn") as HTMLButtonElement;
 const downloadBtn = document.getElementById("download-btn") as HTMLButtonElement;
-const downloadCsvBtn = document.getElementById("download-csv-btn") as HTMLButtonElement;
-const newDocBtn = document.getElementById("new-doc-btn") as HTMLButtonElement;
-const settingsBtn = document.getElementById("settings-btn") as HTMLButtonElement;
-const settingsPanel = document.getElementById("settings-panel")!;
-const settingsClose = document.getElementById("settings-close") as HTMLButtonElement;
-const touchstoneUrlInput = document.getElementById("touchstone-url") as HTMLInputElement;
-const decoyRatioInput = document.getElementById("decoy-ratio") as HTMLInputElement;
-const decoyRatioVal = document.getElementById("decoy-ratio-val")!;
-const aliasStyleSelect = document.getElementById("alias-style") as HTMLSelectElement;
+const backToPrimary = document.getElementById("back-to-primary") as HTMLButtonElement;
 
-// Load pending text from context menu
+// -- State --
+
+let currentResult: PipelineResult | null = null;
+let entities: Entity[] = [];
+let originalText = "";
+let sessionId = `sess_${Date.now().toString(36)}`;
+
+// -- Mode selection on load --
+
 chrome.storage?.local?.get("pendingText", (data) => {
   if (data.pendingText) {
+    // Secondary mode: copy-paste interface
+    primaryView.hidden = true;
+    secondaryView.hidden = false;
     inputText.value = data.pendingText;
     chrome.storage.local.remove("pendingText");
+  } else {
+    // Primary mode: scan + panel
+    primaryView.hidden = false;
+    secondaryView.hidden = true;
   }
 });
 
-// Load saved settings
-chrome.storage?.local?.get(["touchstoneUrl", "decoyRatio", "aliasStyle"], (data) => {
-  if (data.touchstoneUrl) touchstoneUrlInput.value = data.touchstoneUrl;
-  if (data.decoyRatio) {
-    decoyRatioInput.value = data.decoyRatio;
-    decoyRatioVal.textContent = `${data.decoyRatio}%`;
+// ============================================================
+// PRIMARY MODE
+// ============================================================
+
+type PopupStatus = "idle" | "scanning" | "done" | "error";
+
+function setStatus(status: PopupStatus, detail?: string): void {
+  statusDot.className = "status-dot";
+  if (status !== "idle") {
+    statusDot.classList.add(status);
   }
-  if (data.aliasStyle) aliasStyleSelect.value = data.aliasStyle;
+
+  const labels: Record<PopupStatus, string> = {
+    idle: "Pret",
+    scanning: "Analyse en cours...",
+    done: "Analyse terminee",
+    error: "Erreur",
+  };
+
+  statusTextEl.textContent = detail ?? labels[status];
+  btnScan.disabled = status === "scanning";
+}
+
+btnScan.addEventListener("click", async () => {
+  setStatus("scanning");
+
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "SCAN_PAGE" });
+    if (response?.error) {
+      setStatus("error", response.error);
+      return;
+    }
+    setStatus("done");
+  } catch (err) {
+    setStatus("error", String(err));
+  }
 });
 
-// --- Event handlers ---
+btnPanel.addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id != null) {
+    await chrome.sidePanel.open({ tabId: tab.id });
+  }
+  window.close();
+});
+
+linkOptions.addEventListener("click", (e) => {
+  e.preventDefault();
+  chrome.runtime.openOptionsPage();
+});
+
+// ============================================================
+// SECONDARY MODE (copy-paste pipeline)
+// ============================================================
 
 processBtn.addEventListener("click", async () => {
   const text = inputText.value.trim();
   if (!text) return;
 
   originalText = text;
-  document.body.classList.add("loading");
+  processBtn.disabled = true;
+  processBtn.textContent = "Traitement...";
 
   const options: PipelineOptions = {
     touchstone: {
-      baseUrl: touchstoneUrlInput.value || "http://localhost:8420",
+      baseUrl: "http://localhost:8420",
       timeout: 5000,
       maxBatchSize: 100,
     },
-    decoyRatio: parseInt(decoyRatioInput.value) / 100,
-    aliasStyle: aliasStyleSelect.value as "realistic" | "generic",
+    decoyRatio: 0.35,
+    aliasStyle: "realistic",
   };
+
+  // Load saved settings
+  try {
+    const saved = await chrome.storage?.local?.get(["touchstoneUrl", "decoyRatio", "aliasStyle"]);
+    if (saved?.touchstoneUrl) options.touchstone!.baseUrl = saved.touchstoneUrl;
+    if (saved?.decoyRatio) options.decoyRatio = parseInt(saved.decoyRatio) / 100;
+    if (saved?.aliasStyle) options.aliasStyle = saved.aliasStyle as "realistic" | "generic";
+  } catch { /* use defaults */ }
 
   try {
     currentResult = await pipeline(text, fetchPort, store, sessionId, options);
     entities = currentResult.entities;
 
-    // Show language
     const langFlags: Record<string, string> = { fr: "FR", en: "EN", de: "DE" };
     languageIndicator.textContent = langFlags[currentResult.language] ?? currentResult.language;
 
-    // Render review
     renderReview();
     reviewPanel.hidden = false;
     outputPanel.hidden = true;
@@ -96,7 +168,8 @@ processBtn.addEventListener("click", async () => {
     console.error("Pipeline error:", err);
     alert("Erreur lors du traitement. Voir la console.");
   } finally {
-    document.body.classList.remove("loading");
+    processBtn.disabled = false;
+    processBtn.textContent = "Anonymiser";
   }
 });
 
@@ -110,14 +183,13 @@ acceptAllBtn.addEventListener("click", () => {
 skipUnconfirmedBtn.addEventListener("click", () => {
   for (const e of entities) {
     if (e.confidence === "low") {
-      e.acceptedAlias = e.text; // keep original
+      e.acceptedAlias = e.text;
     }
   }
   renderReview();
 });
 
 generateBtn.addEventListener("click", () => {
-  // Accept all entities that haven't been explicitly skipped
   for (const e of entities) {
     if (!e.acceptedAlias) {
       e.acceptedAlias = e.proposedAlias;
@@ -131,65 +203,43 @@ generateBtn.addEventListener("click", () => {
 
 copyBtn.addEventListener("click", async () => {
   await navigator.clipboard.writeText(outputText.value);
-  copyBtn.textContent = "Copié !";
+  copyBtn.textContent = "Copie !";
   setTimeout(() => (copyBtn.textContent = "Copier"), 1500);
 });
 
 downloadBtn.addEventListener("click", () => {
-  download(outputText.value, "anonymise.txt", "text/plain");
+  const blob = new Blob([outputText.value], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "anonymise.txt";
+  a.click();
+  URL.revokeObjectURL(url);
 });
 
-downloadCsvBtn.addEventListener("click", () => {
-  const rows = ["Original,Alias,Type,Confiance"];
-  for (const e of entities) {
-    const alias = e.acceptedAlias ?? e.proposedAlias;
-    rows.push(`"${esc(e.text)}","${esc(alias)}","${e.type}","${e.confidence}"`);
-  }
-  download(rows.join("\n"), "alias-table.csv", "text/csv");
-});
-
-newDocBtn.addEventListener("click", () => {
+backToPrimary.addEventListener("click", () => {
+  primaryView.hidden = false;
+  secondaryView.hidden = true;
+  // Reset secondary state
   inputText.value = "";
   originalText = "";
   entities = [];
   currentResult = null;
-  sessionId = `sess_${Date.now().toString(36)}`;
   reviewPanel.hidden = true;
   outputPanel.hidden = true;
   reviewText.innerHTML = "";
   outputText.value = "";
-  languageIndicator.textContent = "";
 });
 
-settingsBtn.addEventListener("click", () => {
-  settingsPanel.hidden = !settingsPanel.hidden;
-});
-
-settingsClose.addEventListener("click", () => {
-  settingsPanel.hidden = true;
-  // Save settings
-  chrome.storage?.local?.set({
-    touchstoneUrl: touchstoneUrlInput.value,
-    decoyRatio: decoyRatioInput.value,
-    aliasStyle: aliasStyleSelect.value,
-  });
-});
-
-decoyRatioInput.addEventListener("input", () => {
-  decoyRatioVal.textContent = `${decoyRatioInput.value}%`;
-});
-
-// --- Rendering ---
+// -- Rendering --
 
 function renderReview() {
-  // Sort entities by start offset
   const sorted = [...entities].sort((a, b) => a.start - b.start);
 
   let html = "";
   let cursor = 0;
 
   for (const entity of sorted) {
-    // Text before this entity
     if (entity.start > cursor) {
       html += escHtml(originalText.slice(cursor, entity.start));
     }
@@ -198,97 +248,32 @@ function renderReview() {
     const cls = `entity entity-${entity.type}${isSkipped ? " skipped" : ""}`;
     const alias = entity.acceptedAlias ?? entity.proposedAlias;
 
-    html += `<span class="${cls}" data-idx="${sorted.indexOf(entity)}" title="${entity.type} (${entity.confidence}) → ${escHtml(alias)}">${escHtml(entity.text)}</span>`;
+    html += `<span class="${cls}" title="${entity.type} (${entity.confidence}) -> ${escHtml(alias)}">${escHtml(entity.text)}</span>`;
 
     cursor = entity.end;
   }
 
-  // Remaining text
   if (cursor < originalText.length) {
     html += escHtml(originalText.slice(cursor));
   }
 
   reviewText.innerHTML = html;
 
-  // Counter
   const accepted = entities.filter((e) => e.acceptedAlias && e.acceptedAlias !== e.text).length;
   const skipped = entities.filter((e) => e.acceptedAlias === e.text).length;
-  entityCounter.textContent = `${entities.length} entités, ${accepted} acceptées, ${skipped} ignorées`;
-
-  // Click handlers for entity popovers
-  reviewText.querySelectorAll(".entity").forEach((el) => {
-    el.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const idx = parseInt((el as HTMLElement).dataset.idx ?? "0");
-      showPopover(el as HTMLElement, sorted[idx]);
-    });
-  });
+  entityCounter.textContent = `${entities.length} entites, ${accepted} acceptees, ${skipped} ignorees`;
 }
 
-function showPopover(anchor: HTMLElement, entity: Entity) {
-  // Remove existing popovers
-  document.querySelectorAll(".entity-popover").forEach((p) => p.remove());
+// -- Listen for status broadcasts --
 
-  const alias = entity.acceptedAlias ?? entity.proposedAlias;
-  const popover = document.createElement("div");
-  popover.className = "entity-popover";
-  popover.innerHTML = `
-    <div class="field"><label>Type</label><span>${entity.type}</span></div>
-    <div class="field"><label>Confiance</label><span>${entity.confidence}</span></div>
-    <div class="field"><label>Sources</label><span>${entity.sources.join(", ")}</span></div>
-    <label>Alias</label>
-    <input type="text" class="alias-input" value="${escHtml(alias)}" />
-    <div class="popover-actions">
-      <button class="btn btn-sm btn-accept">Accepter</button>
-      <button class="btn btn-sm btn-skip">Ignorer</button>
-    </div>
-  `;
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === "STATUS") {
+    setStatus(message.status, message.detail);
+  }
+});
 
-  anchor.style.position = "relative";
-  anchor.appendChild(popover);
-
-  const aliasInput = popover.querySelector(".alias-input") as HTMLInputElement;
-
-  popover.querySelector(".btn-accept")!.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    entity.acceptedAlias = aliasInput.value;
-    popover.remove();
-    renderReview();
-  });
-
-  popover.querySelector(".btn-skip")!.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    entity.acceptedAlias = entity.text; // keep original = skip
-    popover.remove();
-    renderReview();
-  });
-
-  // Close on outside click
-  const closeHandler = (ev: MouseEvent) => {
-    if (!popover.contains(ev.target as Node)) {
-      popover.remove();
-      document.removeEventListener("click", closeHandler);
-    }
-  };
-  setTimeout(() => document.addEventListener("click", closeHandler), 0);
-}
-
-// --- Utilities ---
+// -- Utilities --
 
 function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function esc(s: string): string {
-  return s.replace(/"/g, '""');
-}
-
-function download(content: string, filename: string, mime: string) {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }

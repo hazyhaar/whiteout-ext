@@ -1,0 +1,307 @@
+/* Whiteout Sidebar — Dark theme review panel */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  background: #1a1a2e;
+  color: #eaeaea;
+  overflow-y: auto;
+}
+
+.sidebar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  min-height: 100vh;
+}
+
+/* -- Header -- */
+
+.sidebar-header {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.sidebar-header h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+
+.doc-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.doc-title {
+  font-size: 12px;
+  color: #b0b0b0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.doc-meta {
+  font-size: 11px;
+  color: #777;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.separator {
+  color: #444;
+}
+
+/* -- Controls -- */
+
+.controls {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 7px 12px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.15s ease, opacity 0.15s ease;
+  flex: 1;
+  min-width: 0;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #0f3460;
+  color: #eaeaea;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #1a4a7a;
+}
+
+.btn-danger {
+  background: #5c1a1a;
+  color: #ffaaaa;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #7a2222;
+}
+
+.btn-accent {
+  background: #1a4a2e;
+  color: #aaffcc;
+}
+
+.btn-accent:hover:not(:disabled) {
+  background: #226638;
+}
+
+/* -- Status -- */
+
+.status-message {
+  padding: 8px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.status-message.scanning {
+  background: #2a2a00;
+  color: #ffcc00;
+}
+
+.status-message.error {
+  background: #2a0a0a;
+  color: #ff6666;
+}
+
+.status-message.done {
+  background: #0a2a1a;
+  color: #66ff99;
+}
+
+/* -- Entity list -- */
+
+.entity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.empty-state {
+  text-align: center;
+  color: #666;
+  padding: 24px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* -- Entity group -- */
+
+.entity-group {
+  background: #16213e;
+  border-radius: 6px;
+  padding: 10px;
+  border-left: 3px solid #444;
+}
+
+.entity-group.type-person {
+  border-left-color: #3a8fd6;
+}
+
+.entity-group.type-company {
+  border-left-color: #2ca060;
+}
+
+.entity-group.type-address {
+  border-left-color: #d98020;
+}
+
+.entity-group.type-city {
+  border-left-color: #d98020;
+}
+
+.entity-group.type-email,
+.entity-group.type-phone,
+.entity-group.type-iban,
+.entity-group.type-ssn {
+  border-left-color: #cc3333;
+}
+
+.entity-group.type-url {
+  border-left-color: #cc3333;
+}
+
+.entity-group.type-unknown {
+  border-left-color: #999;
+}
+
+.entity-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.entity-term {
+  font-weight: 600;
+  font-size: 13px;
+  color: #ffffff;
+}
+
+.entity-badge {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.entity-type {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #2a2a4a;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.entity-confidence {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #1a2a1a;
+  color: #8a8;
+}
+
+.entity-sources {
+  font-size: 9px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.entity-count {
+  font-size: 10px;
+  color: #777;
+}
+
+/* -- Alias choices -- */
+
+.alias-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.alias-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.alias-choice input[type="radio"] {
+  accent-color: #4a90d9;
+  margin: 0;
+}
+
+.alias-choice label {
+  cursor: pointer;
+  color: #ccc;
+}
+
+.alias-choice label.redacted {
+  color: #ff8888;
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.alias-choice label.proposed {
+  color: #88ccff;
+  font-weight: 500;
+}
+
+.alias-custom-input {
+  margin-top: 4px;
+  display: flex;
+  gap: 4px;
+}
+
+.alias-custom-input input[type="text"] {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #0d1117;
+  color: #eaeaea;
+  font-size: 12px;
+}
+
+.alias-custom-input input[type="text"]:focus {
+  outline: none;
+  border-color: #4a90d9;
+}
+
+.alias-custom-input input[type="text"]::placeholder {
+  color: #555;
+}

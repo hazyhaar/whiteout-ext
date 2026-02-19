@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Whiteout - Revue</title>
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <div class="sidebar-container">
+    <!-- Header -->
+    <header class="sidebar-header">
+      <h1>Whiteout</h1>
+      <div class="doc-info" id="doc-info">
+        <span class="doc-title" id="doc-title">Aucun document</span>
+        <div class="doc-meta">
+          <span id="doc-lang">--</span>
+          <span class="separator">|</span>
+          <span id="doc-entities">0 entites</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button id="btn-scan" class="btn btn-primary">Scanner la page</button>
+      <button id="btn-redact-all" class="btn btn-danger" disabled>Tout [REDACTED]</button>
+      <button id="btn-apply" class="btn btn-accent" disabled>Appliquer</button>
+    </div>
+
+    <!-- Status message -->
+    <div class="status-message" id="status-message" style="display:none;">
+      <span id="status-text"></span>
+    </div>
+
+    <!-- Entity list -->
+    <div class="entity-list" id="entity-list">
+      <p class="empty-state">Cliquez sur "Scanner la page" pour commencer l'analyse.</p>
+    </div>
+  </div>
+
+  <script src="sidebar.js" type="module"></script>
+</body>
+</html>

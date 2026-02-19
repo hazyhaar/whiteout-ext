@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Whiteout - Options</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      background: #1a1a2e;
+      color: #eaeaea;
+      padding: 24px;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 24px;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #ccc;
+      margin-bottom: 6px;
+    }
+
+    .hint {
+      font-size: 11px;
+      color: #777;
+      margin-top: 4px;
+    }
+
+    input[type="text"],
+    input[type="url"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #333;
+      border-radius: 5px;
+      background: #0d1117;
+      color: #eaeaea;
+      font-size: 14px;
+    }
+
+    input[type="text"]:focus,
+    input[type="url"]:focus {
+      outline: none;
+      border-color: #4a90d9;
+    }
+
+    /* -- Checkboxes -- */
+
+    .checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      accent-color: #4a90d9;
+    }
+
+    /* -- Slider -- */
+
+    .slider-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      accent-color: #4a90d9;
+      height: 4px;
+    }
+
+    .slider-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      min-width: 40px;
+      text-align: right;
+    }
+
+    /* -- Select -- */
+
+    select {
+      padding: 8px 12px;
+      border: 1px solid #333;
+      border-radius: 5px;
+      background: #0d1117;
+      color: #eaeaea;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: #4a90d9;
+    }
+
+    /* -- Toggle -- */
+
+    .toggle-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toggle {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      background: #333;
+      border-radius: 11px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .toggle.active {
+      background: #4a90d9;
+    }
+
+    .toggle-knob {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      background: #eaeaea;
+      border-radius: 50%;
+      transition: left 0.2s ease;
+    }
+
+    .toggle.active .toggle-knob {
+      left: 20px;
+    }
+
+    .toggle-label {
+      font-size: 13px;
+      color: #ccc;
+    }
+
+    /* -- Save -- */
+
+    .save-bar {
+      margin-top: 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn-save {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 5px;
+      background: #0f3460;
+      color: #eaeaea;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .btn-save:hover {
+      background: #1a4a7a;
+    }
+
+    .save-status {
+      font-size: 12px;
+      color: #66ff99;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .save-status.visible {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <h1>Whiteout - Options</h1>
+
+  <!-- Touchstone URL -->
+  <div class="form-group">
+    <label for="touchstone-url">URL du serveur Touchstone</label>
+    <input type="url" id="touchstone-url" placeholder="http://localhost:8420">
+    <p class="hint">API REST de classification des entites nominatives.</p>
+  </div>
+
+  <!-- Preferred jurisdictions -->
+  <div class="form-group">
+    <label>Juridictions preferees</label>
+    <div class="checkbox-group" id="jurisdictions">
+      <label class="checkbox-item">
+        <input type="checkbox" value="fr" checked> FR
+      </label>
+      <label class="checkbox-item">
+        <input type="checkbox" value="uk"> UK
+      </label>
+      <label class="checkbox-item">
+        <input type="checkbox" value="de"> DE
+      </label>
+      <label class="checkbox-item">
+        <input type="checkbox" value="es"> ES
+      </label>
+      <label class="checkbox-item">
+        <input type="checkbox" value="it"> IT
+      </label>
+      <label class="checkbox-item">
+        <input type="checkbox" value="be"> BE
+      </label>
+      <label class="checkbox-item">
+        <input type="checkbox" value="ch"> CH
+      </label>
+      <label class="checkbox-item">
+        <input type="checkbox" value="lu"> LU
+      </label>
+    </div>
+    <p class="hint">Cible les dictionnaires de ces juridictions en priorite.</p>
+  </div>
+
+  <!-- Decoy ratio -->
+  <div class="form-group">
+    <label for="decoy-ratio">Ratio de leurres</label>
+    <div class="slider-wrapper">
+      <input type="range" id="decoy-ratio" min="0.10" max="0.50" step="0.01" value="0.35">
+      <span class="slider-value" id="decoy-ratio-value">0.35</span>
+    </div>
+    <p class="hint">Proportion de termes leurres envoyes a Touchstone (10-50%).</p>
+  </div>
+
+  <!-- Alias style -->
+  <div class="form-group">
+    <label for="alias-style">Style d'alias</label>
+    <select id="alias-style">
+      <option value="realistic" selected>Realiste (noms plausibles)</option>
+      <option value="generic">Generique (Personne_1, Entreprise_2...)</option>
+    </select>
+    <p class="hint">Methode de generation des alias de remplacement.</p>
+  </div>
+
+  <!-- Language detection -->
+  <div class="form-group">
+    <label>Detection de la langue</label>
+    <div class="toggle-wrapper">
+      <div class="toggle active" id="auto-lang-toggle">
+        <div class="toggle-knob"></div>
+      </div>
+      <span class="toggle-label" id="auto-lang-label">Detection automatique activee</span>
+    </div>
+  </div>
+
+  <!-- Default language -->
+  <div class="form-group" id="default-lang-group" style="display:none;">
+    <label for="default-lang">Langue par defaut</label>
+    <select id="default-lang">
+      <option value="fr">Francais</option>
+      <option value="en">English</option>
+      <option value="de">Deutsch</option>
+      <option value="es">Espanol</option>
+      <option value="it">Italiano</option>
+    </select>
+  </div>
+
+  <!-- Save -->
+  <div class="save-bar">
+    <button class="btn-save" id="btn-save">Sauvegarder</button>
+    <span class="save-status" id="save-status">Options enregistrees.</span>
+  </div>
+
+  <script src="options.js" type="module"></script>
+</body>
+</html>
