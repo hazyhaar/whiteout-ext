@@ -8,6 +8,9 @@
     "build:apple": "npm run -w packages/core bundle:iife && node scripts/copy-core-apple.js",
     "bundle:iife": "npm run -w packages/core bundle:iife",
     "test": "npm run -w packages/core test",
+    "test:e2e": "npm run -w packages/core test -- __tests__/e2e",
+    "test:dom": "npm run -w packages/chrome test",
+    "generate:golden": "npx tsx packages/core/test-fixtures/golden/generate-golden.ts",
     "typecheck": "npm run -w packages/core typecheck"
   }
 }

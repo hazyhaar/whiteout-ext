@@ -92,7 +92,7 @@ export async function classifyBatch(
           return results;
         }
 
-        parseAndStoreResults(response.body, realSet, results, store);
+        await parseAndStoreResults(response.body, realSet, results, store);
       } else {
         await classifyBatchRest(mixed, realSet, fetchPort, store, cfg, results);
       }
