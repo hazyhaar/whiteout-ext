@@ -1,24 +1,15 @@
-# CLAUDE.md — whiteout-ext
+# whiteout-ext
 
-> **Règle n°1** — Un bug trouvé en audit mais pas par un test est d'abord une faille de test. Écrire le test rouge, puis fixer. Pas de fix sans test.
+Responsabilité: Extension cross-platform (Chrome, iOS, Android) en TypeScript. Seul projet non-Go du monorepo.
+Runtime: TypeScript/Node (npm workspaces)
 
-## Ce que c'est
+## Index
 
-Extension cross-platform (Chrome, iOS, Android) en TypeScript. Monorepo npm workspaces.
-
-**Attention** : ce n'est **pas du Go**. C'est le seul projet TypeScript/Node du dépôt.
-
-## Structure
-
-```
-whiteout-ext/
-├── packages/
-│   ├── core/              # Logique partagée
-│   ├── chrome/            # Extension Chrome (manifest v3)
-│   └── proto/             # Protocol buffers / schéma
-├── package.json           # npm workspaces root
-└── node_modules/          # ~122M (ne pas committer)
-```
+| Package | Rôle |
+|---------|------|
+| `packages/core/` | Logique partagée |
+| `packages/chrome/` | Extension Chrome (manifest v3) |
+| `packages/proto/` | Protocol buffers / schéma |
 
 ## Build
 
@@ -27,8 +18,12 @@ npm install
 npm run build
 ```
 
-## Particularités
+## Invariants
 
 - Monorepo npm workspaces (pas turborepo/nx)
-- `node_modules/` est volumineux — s'assurer qu'il est gitignored
-- Tests E2E disponibles
+- `node_modules/` gitignored (~122M)
+
+## NE PAS
+
+- Committer `node_modules/`
+- Traiter comme un projet Go
